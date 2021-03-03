@@ -145,6 +145,14 @@ private:
 class SolverPBD 
 {
 public:
+	SolverPBD()
+	{
+
+	}
+	~SolverPBD()
+	{
+
+	}
 	void SetTarget(PBDObject* pbdObj) { this->pbdObj = pbdObj; }
 	void Advect(float dt, HardwareType ht);
 	void ProjectConstraint(HardwareType ht, SolverType st, int iterations);

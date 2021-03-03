@@ -29,6 +29,8 @@ int iteration = 10;
 HardwareType ht = CPU;
 SolverType st = GAUSSSEIDEL;
 
+void WritePointsToFile(BufferVector3f positionBuffer, int frame);
+
 
 /*
     CPU Run
@@ -90,9 +92,9 @@ int main()
     solver.SetTarget(&pbdObj);
    // solver.SetTarget(PBDObject::Create("E:/top.cache","E:/cc.cache"));
 
-    int FPS = 25;
+    int FPS = 24;
     float dt = 1.0 / FPS / (float)substep;
-
+    //int frame = 0
     for (size_t i = startFrame; i < endFrame; i++)
     {
         for (size_t s = 0; s < substep; s++)
@@ -101,6 +103,7 @@ int main()
             solver.ProjectConstraint(ht, st, iteration);
             solver.Integration(dt, ht);
         }
+        WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
     }      
 }
 
@@ -776,5 +779,19 @@ void IntegrateVelocitys(
         positionBuffer[i] = prdPBuffer[i];
     }
     // std::cout << "       IntegrateVelocitys" << std::endl;
+}
+
+void WritePointsToFile(BufferVector3f positionBuffer, int frame)
+{
+    fstream file;
+    string path = "D://0301PBDCUDA//PointObjHoudini//m." + to_string(frame) + ".obj";
+    //string path = "D://0220PBD//PointObjMovePoint//m." + to_string(frame) + ".obj";
+    file.open(path, ios::out);
+    file << "g" << endl;
+    for (int i = 0; i < positionBuffer.GetSize(); i++)
+    {
+        file << "v " << positionBuffer.m_Data[i].x << "  " << positionBuffer.m_Data[i].y << "  " << positionBuffer.m_Data[i].z << endl;
+    }
+    file.close();
 }
 

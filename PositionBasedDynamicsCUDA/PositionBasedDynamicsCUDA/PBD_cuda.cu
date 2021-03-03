@@ -28,7 +28,10 @@ void PBDObject::InitConstr(int numOfConstr, float unitMass, float* stiffnesses)
 	constrPBDBuffer.topol.posBuffer = meshTopol.posBuffer;
 	constrPBDBuffer.prdPBuffer = meshTopol.posBuffer;
 	constrPBDBuffer.velBuffer.m_Data.resize(constrPBDBuffer.prdPBuffer.GetSize(), make_float3(0.0f, 0.0f, 0.0f));
-
+	/*for (int i = 0; i < 3; i++)
+	{
+		printf("postion Buffer: %f, %f, %f \n", constrPBDBuffer.topol.posBuffer.m_Data[i].x, constrPBDBuffer.topol.posBuffer.m_Data[i].y, constrPBDBuffer.topol.posBuffer.m_Data[i].z);
+	}*/
 	
 	// assert(numOfConstr == stiffnesses.size());
 	for (int i = 0; i < numOfConstr; ++i)
@@ -38,6 +41,10 @@ void PBDObject::InitConstr(int numOfConstr, float unitMass, float* stiffnesses)
 		case DISTANCE:
 			CreateDistanceIndices(constrPBDBuffer.topol.indices, resY, resX);
 			CreateSingleDistConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, stiffnesses[DISTANCE], unitMass);
+			//for (int i = 0; i < 3; i++)
+			//{
+			//	printf("primlist: %d, %d\n", constrPBDBuffer.topol.primList.m_Data[i].x, constrPBDBuffer.topol.primList.m_Data[i].y);
+			//}
 			break;
 		case BENDING:
 			break;
@@ -100,6 +107,7 @@ void PBDObject::CreateSingleDistConstr(BufferVector3f& positionBuffer, BufferInt
 		//init mass
 		constrPBDBuffer.mass.m_Data.push_back(unitMass);
 		constrPBDBuffer.mass.m_Data.push_back(unitMass);
+		//init contraint type
 		constrPBDBuffer.constraintType.m_Data.push_back(DISTANCE);
 	}
 }
@@ -146,9 +154,31 @@ void PBDObject::CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX
 
 void SolverPBD::Advect(float dt, HardwareType ht)
 {
+	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
+	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
 	switch (ht)
 	{
 	case CPU:
+	
+		for (int i = 0; i < velBuffer->GetSize(); i++)
+		{
+			/*if (i == 30)
+				printf("old velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
+			velBuffer->m_Data[i] += pbdObj->gravity * dt;
+			/*if(i == 30)
+				printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
+			velBuffer->m_Data[i] *= powf(pbdObj->dampingRate, dt);
+			
+		}
+
+		for (int j = 0; j < prdPBuffer->GetSize(); j++)
+		{
+			prdPBuffer->m_Data[j] = positionBuffer->m_Data[j] + velBuffer->m_Data[j] * dt;
+
+			//printf("postion Buffer: %f, %f, %f \n", prdPBuffer.m_Data[j].x, prdPBuffer.m_Data[j].y, prdPBuffer.m_Data[j].z);
+
+		}
 		break;
 	case GPU:
 		break;
@@ -159,52 +189,52 @@ void SolverPBD::Advect(float dt, HardwareType ht)
 
 void SolverPBD::ProjectConstraint(HardwareType ht, SolverType st, int iterations)
 {
-	auto primList = pbdObj->constrPBDBuffer.topol.primList;
-	auto prdPBuffer = pbdObj->constrPBDBuffer.prdPBuffer;
-	auto massBuffer = pbdObj->constrPBDBuffer.mass;
-	auto restLengthBuffer = pbdObj->constrPBDBuffer.restLength;
-	auto stiffnessBuffer = pbdObj->constrPBDBuffer.stiffness;
-	auto restPosBuffer = pbdObj->restPosBuffer;
-	auto indices = pbdObj->constrPBDBuffer.topol.indices;
+	auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
+	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	auto massBuffer = &(pbdObj->constrPBDBuffer.mass);
+	auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restLength);
+	auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffness);
+	auto restPosBuffer = &(pbdObj->restPosBuffer);
+	auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
 	switch (ht)
 	{
 	case CPU:
 		for (size_t ii = 0; ii < iterations; ii++)
 		{
-			for (size_t i = 0; i < primList.GetSize(); i++)
+			for (size_t i = 0; i < primList->GetSize(); i++)
 			{
-				if (primList.m_Data[i].y != 2)
+				if (primList->m_Data[i].y != 2)
 					continue;
-				int i0 = indices.m_Data[primList.m_Data[i].x];
-				int i1 = indices.m_Data[primList.m_Data[i].x + 1];
+				int i0 = indices->m_Data[primList->m_Data[i].x];
+				int i1 = indices->m_Data[primList->m_Data[i].x + 1];
 				float3 dp1;
 				float3 dp2;
-				float d = Distance(prdPBuffer.m_Data[i0], prdPBuffer.m_Data[i1]);
+				float d = Distance(prdPBuffer->m_Data[i0], prdPBuffer->m_Data[i1]);
 				float3 v;
-				v = prdPBuffer.m_Data[i0] - prdPBuffer.m_Data[i1];
-				dp1.x = -massBuffer.m_Data[i0] / (massBuffer.m_Data[i0] + massBuffer.m_Data[i1]) * (d - restLengthBuffer.m_Data[i]) * v.x / d;
-				dp1.y = -massBuffer.m_Data[i0] / (massBuffer.m_Data[i0] + massBuffer.m_Data[i1]) * (d - restLengthBuffer.m_Data[i]) * v.y / d;
-				dp1.z = -massBuffer.m_Data[i0] / (massBuffer.m_Data[i0] + massBuffer.m_Data[i1]) * (d - restLengthBuffer.m_Data[i]) * v.z / d;
-				dp2.x = massBuffer.m_Data[i1] / (massBuffer.m_Data[i0] + massBuffer.m_Data[i1]) * (d - restLengthBuffer.m_Data[i]) * v.x / d;
-				dp2.y = massBuffer.m_Data[i1] / (massBuffer.m_Data[i0] + massBuffer.m_Data[i1]) * (d - restLengthBuffer.m_Data[i]) * v.y / d;
-				dp2.z = massBuffer.m_Data[i1] / (massBuffer.m_Data[i0] + massBuffer.m_Data[i1]) * (d - restLengthBuffer.m_Data[i]) * v.z / d;
-				float k = 1 - powf(1 - stiffnessBuffer.m_Data[i], 1.0 / (ii + 1));
+				v = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
+				dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
+				dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
+				dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
+				dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
+				dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
+				dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
+				float k = 1 - powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
 				dp1 *= k;
 				dp2 *= k;
-				prdPBuffer.m_Data[i0] += dp1;
-				prdPBuffer.m_Data[i1] += dp2;
+				prdPBuffer->m_Data[i0] += dp1;
+				prdPBuffer->m_Data[i1] += dp2;
 			}
 
-			for (size_t j = 0; j < prdPBuffer.GetSize(); j++)
+			for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
 			{
 				//attach points
 				if (j == 0)
 				{
-					prdPBuffer.m_Data[j] = restPosBuffer.m_Data[0];
+					prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
 				}
 				if ( j == pbdObj->resX - 1)
 				{
-					prdPBuffer.m_Data[j] = restPosBuffer.m_Data[1];
+					prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
 				}
 
 				////point collide with sphere
@@ -270,16 +300,16 @@ void SolverPBD::ProjectConstraint(HardwareType ht, SolverType st, int iterations
 
 void SolverPBD::Integration(float dt, HardwareType ht)
 {
-	auto positionBuffer = pbdObj->meshTopol.posBuffer;
-	auto velBuffer = pbdObj->constrPBDBuffer.velBuffer;
-	auto prdPBuffer= pbdObj->constrPBDBuffer.prdPBuffer;
+	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
+	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
+	auto prdPBuffer= &(pbdObj->constrPBDBuffer.prdPBuffer);
 	switch (ht)
 	{
 	case CPU:
-		for (size_t i = 0; i < positionBuffer.GetSize(); i++)
+		for (size_t i = 0; i < positionBuffer->GetSize(); i++)
 		{
-			velBuffer.m_Data[i] = (prdPBuffer.m_Data[i] - positionBuffer.m_Data[i]) / dt;
-			positionBuffer.m_Data[i] = prdPBuffer.m_Data[i];
+			velBuffer->m_Data[i] = (prdPBuffer->m_Data[i] - positionBuffer->m_Data[i]) / dt;
+			positionBuffer->m_Data[i] = prdPBuffer->m_Data[i];
 		}
 		break;
 	case GPU:
