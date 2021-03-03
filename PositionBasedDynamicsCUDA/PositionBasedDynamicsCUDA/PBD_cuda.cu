@@ -27,8 +27,8 @@ void PBDObject::InitConstr(int numOfConstr, float unitMass, float* stiffnesses)
 {
 	constrPBDBuffer.topol.posBuffer = meshTopol.posBuffer;
 	constrPBDBuffer.prdPBuffer = meshTopol.posBuffer;
-	memset(&constrPBDBuffer.velBuffer.m_Data, 0, sizeof(constrPBDBuffer.topol.posBuffer.m_Data));
-	fill(constrPBDBuffer.velBuffer.m_Data.begin(), constrPBDBuffer.velBuffer.m_Data.end(), 0);
+	constrPBDBuffer.velBuffer.m_Data.resize(constrPBDBuffer.prdPBuffer.GetSize(), make_float3(0.0f, 0.0f, 0.0f));
+
 	
 	// assert(numOfConstr == stiffnesses.size());
 	for (int i = 0; i < numOfConstr; ++i)
@@ -273,14 +273,13 @@ void SolverPBD::Integration(float dt, HardwareType ht)
 	auto positionBuffer = pbdObj->meshTopol.posBuffer;
 	auto velBuffer = pbdObj->constrPBDBuffer.velBuffer;
 	auto prdPBuffer= pbdObj->constrPBDBuffer.prdPBuffer;
-	printf("vel: %d, pos: %d, prd: %d\n", velBuffer.GetSize(), positionBuffer.GetSize(), prdPBuffer.GetSize());
 	switch (ht)
 	{
 	case CPU:
 		for (size_t i = 0; i < positionBuffer.GetSize(); i++)
 		{
-			//velBuffer.m_Data[i] = (prdPBuffer.m_Data[i] - positionBuffer.m_Data[i]) / dt;
-			//positionBuffer.m_Data[i] = prdPBuffer.m_Data[i];
+			velBuffer.m_Data[i] = (prdPBuffer.m_Data[i] - positionBuffer.m_Data[i]) / dt;
+			positionBuffer.m_Data[i] = prdPBuffer.m_Data[i];
 		}
 		break;
 	case GPU:

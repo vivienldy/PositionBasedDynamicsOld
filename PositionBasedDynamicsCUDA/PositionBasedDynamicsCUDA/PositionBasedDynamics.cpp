@@ -86,8 +86,6 @@ void EdgeColoring()
 int main()
 { 
     SolverPBD solver;
-   // PBDObject pbdObj();
-    //pbdObj.dampingRate = dampingRate;
     PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY);
     solver.SetTarget(&pbdObj);
    // solver.SetTarget(PBDObject::Create("E:/top.cache","E:/cc.cache"));
@@ -95,18 +93,15 @@ int main()
     int FPS = 25;
     float dt = 1.0 / FPS / (float)substep;
 
-    solver.Advect(dt, ht);
-    solver.ProjectConstraint(ht, st, iteration);
-    solver.Integration(dt, ht);
-    //for (size_t i = startFrame; i < endFrame; i++)
-    //{
-    //    for (size_t s = 0; s < substep; s++)
-    //    {
-    //        solver.Advect(dt, ht);
-    //        solver.ProjectConstraint(ht, st, iteration);
-    //        solver.Integration(dt, ht);
-    //    }
-    //}      
+    for (size_t i = startFrame; i < endFrame; i++)
+    {
+        for (size_t s = 0; s < substep; s++)
+        {
+            solver.Advect(dt, ht);
+            solver.ProjectConstraint(ht, st, iteration);
+            solver.Integration(dt, ht);
+        }
+    }      
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
