@@ -16,21 +16,37 @@
 
 using namespace std;
 
-int resY = 32;
-int resX = 32;
-float dampingRate = 0.9f;
-float sizeX = 48.0f;
-float sizeY = 64.0f;
-float3 gravity = make_float3(0.0, -10.0, 0.0);
-int startFrame = 1;
-int endFrame = 200;
-int substep = 4;
-int iteration = 10;
-HardwareType ht = CPU;
-SolverType st = GAUSSSEIDEL;
+namespace IO
+{
+    template <typename S>
+    void SaveBuffer(Buffer<S>& buffer, std::ofstream& ofs)
+    {
+        buffer.Save(ofs);
+    }
 
-void WritePointsToFile(BufferVector3f positionBuffer, int frame);
+    template <typename S>
+    void SaveBuffer(Buffer<S>& buffer, std::string path)
+    {
+        std::ofstream ofs(path);
+        if (!ofs.is_open())
+            return;
+        buffer.Save(ofs);
+    }
 
+    void SaveToplogy(Topology top, std::string path)
+    {
+        std::ofstream ofs(path);
+        if (!ofs.is_open())
+            return;
+
+        SaveBuffer<int>(top.indices, ofs);
+        SaveBuffer<float3>(top.posBuffer, ofs);
+        SaveBuffer<int2>(top.primList, ofs);
+
+        ofs.flush();
+        ofs.close();
+    }
+}
 
 /*
     CPU Run
@@ -78,33 +94,43 @@ for(auto workset: workSets)
 
 */
 
-
-void EdgeColoring()
-{
-
-}
-
-
 int main()
 { 
+    int resY = 5;
+    int resX = 5;
+    float dampingRate = 0.9f;
+    float sizeX = 48.0f;
+    float sizeY = 64.0f;
+    float3 gravity = make_float3(0.0, -10.0, 0.0);
+    int startFrame = 1;
+    int endFrame = 200;
+    int substep = 4;
+    int iteration = 10;
+    HardwareType ht = CPU;
+    SolverType st = GAUSSSEIDEL;
+
     SolverPBD solver;
     PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY);
     solver.SetTarget(&pbdObj);
+
+    //pbdObj.meshTopol.primList = pbdObj.constrPBDBuffer.topol.primList;
+    //IO::SaveToplogy(pbdObj.meshTopol, "D:/op.cache");
+
    // solver.SetTarget(PBDObject::Create("E:/top.cache","E:/cc.cache"));
 
-    int FPS = 24;
-    float dt = 1.0 / FPS / (float)substep;
-    //int frame = 0
-    for (size_t i = startFrame; i < endFrame; i++)
-    {
-        for (size_t s = 0; s < substep; s++)
-        {
-            solver.Advect(dt, ht);
-            solver.ProjectConstraint(ht, st, iteration);
-            solver.Integration(dt, ht);
-        }
-        WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
-    }      
+    //int FPS = 24;
+    //float dt = 1.0 / FPS / (float)substep;
+    ////int frame = 0
+    //for (size_t i = startFrame; i < endFrame; i++)
+    //{
+    //    for (size_t s = 0; s < substep; s++)
+    //    {
+    //        solver.Advect(dt, ht);
+    //        solver.ProjectConstraint(ht, st, iteration);
+    //        solver.Integration(dt, ht);
+    //    }
+    //    WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
+    //}      
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);

@@ -79,7 +79,6 @@
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <CudaCompile Include="kernel.cu" />
     <CudaCompile Include="PBD_cuda.cu" />
     <CudaCompile Include="PBD_cuda_impl.cu" />
   </ItemGroup>

@@ -1,12 +1,5 @@
-#include<vector>
-#include<assert.h>
-#include<vector_types.h>
-#include<vector_functions.h>
-#include "cuda_runtime.h"
-#include "helper_math.h"
-#include "device_launch_parameters.h"
 #include "PBD_Basic.cuh"
-
+#include <iostream>
 
 float Distance(float3 p1, float3 p2)
 {
@@ -17,34 +10,83 @@ float Distance(float3 p1, float3 p2)
 void PBDObject::Init()
 {
 	// OpenGL Topology
+	meshTopol.indices.SetName("TopolIndices");
+	meshTopol.posBuffer.SetName("TopolPosBuffer");
+	meshTopol.primList.SetName("TopolPrimList");
+
 	CreatePosition(meshTopol.posBuffer, make_float2(0.0, 0.0), sizeX, sizeY, resY, resX);
 	CreateOpenGLIndices(meshTopol.indices, resY, resX);
 	float stiffnessBuff[1] = { 1.0f };
 	InitConstr(1, 1.0f, stiffnessBuff);
 }
 
-void PBDObject::InitConstr(int numOfConstr, float unitMass, float* stiffnesses)
+void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnesses)
 {
 	constrPBDBuffer.topol.posBuffer = meshTopol.posBuffer;
 	constrPBDBuffer.prdPBuffer = meshTopol.posBuffer;
 	constrPBDBuffer.velBuffer.m_Data.resize(constrPBDBuffer.prdPBuffer.GetSize(), make_float3(0.0f, 0.0f, 0.0f));
+
+	constrPBDBuffer.topol.primList.SetName("ConstrPrimList");
 	/*for (int i = 0; i < 3; i++)
 	{
 		printf("postion Buffer: %f, %f, %f \n", constrPBDBuffer.topol.posBuffer.m_Data[i].x, constrPBDBuffer.topol.posBuffer.m_Data[i].y, constrPBDBuffer.topol.posBuffer.m_Data[i].z);
 	}*/
-	
+
+	std::set<unsigned long>::iterator it;
 	// assert(numOfConstr == stiffnesses.size());
-	for (int i = 0; i < numOfConstr; ++i)
+	for (int i = 0; i < constrNumSetting; ++i)
 	{
 		switch (i)
 		{
 		case DISTANCE:
 			CreateDistanceIndices(constrPBDBuffer.topol.indices, resY, resX);
 			CreateSingleDistConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, stiffnesses[DISTANCE], unitMass);
-			//for (int i = 0; i < 3; i++)
-			//{
-			//	printf("primlist: %d, %d\n", constrPBDBuffer.topol.primList.m_Data[i].x, constrPBDBuffer.topol.primList.m_Data[i].y);
-			//}
+			GenePoint2PrimsMap(constrPBDBuffer.topol);
+			GenePrim2PrimsMap(constrPBDBuffer.topol);
+			EdgeColoring(10);
+			/*printf("Indices: \n");
+			printf("\t");
+			for (int i = 0; i < constrPBDBuffer.topol.indices.GetSize(); ++i)
+			{
+				printf("%d-", constrPBDBuffer.topol.indices.m_Data[i]);
+			}
+			printf("\nPoint2PrimsMap: \n");
+			
+			for (int i = 0; i < constrPBDBuffer.Point2PrimsMap.size(); ++i)
+			{
+				printf("\t");
+				printf("point %d (size: %d): ", i, constrPBDBuffer.Point2PrimsMap[i].size());
+				for (int j = 0; j < constrPBDBuffer.Point2PrimsMap[i].size(); ++j)
+				{
+					printf("%d-", constrPBDBuffer.Point2PrimsMap[i][j]);
+				}
+				printf("\n");
+			}
+
+			printf("\nPrim2PrimsMap: \n");
+			printf("size of prim2prims indices%d-", constrPBDBuffer.Prim2PrimsMap.indices.GetSize());
+			printf("\n");
+			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.indices.GetSize(); ++i)
+			{
+				printf("%d-", constrPBDBuffer.Prim2PrimsMap.indices.m_Data[i]);
+			}
+			printf("\n");
+			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.startNumList.GetSize(); ++i)
+			{
+				printf("startIdx: %d, neighbour Num: %d\n", constrPBDBuffer.Prim2PrimsMap.startNumList.m_Data[i].x, constrPBDBuffer.Prim2PrimsMap.startNumList.m_Data[i].y);
+			}*/
+
+			/*printf("primMap (size: %d): ",constrPBDBuffer.Prim2PrimsMap.size());
+			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.size(); ++i)
+			{
+				printf("\t");
+				printf("prim %d (size: %d): ", i, constrPBDBuffer.Prim2PrimsMap[i].size());
+				for  (auto it = constrPBDBuffer.Prim2PrimsMap[i].begin(); it != constrPBDBuffer.Prim2PrimsMap[i].end(); ++it)
+				{
+					printf("%d-", *it);
+				}
+				printf("\n");
+			}*/
 			break;
 		case BENDING:
 			break;
@@ -85,6 +127,11 @@ void PBDObject::CreateDistanceIndices(BufferInt& indices, int resY, int resX)
 			indices.m_Data.push_back(i + resX - 1);
 		}
 	}
+	for (int i = num - resX; i < num - 1; ++i)
+	{
+		indices.m_Data.push_back(i);
+		indices.m_Data.push_back(i + 1);
+	}
 }
 
 void PBDObject::CreateSingleDistConstr(BufferVector3f& positionBuffer, BufferInt2& primList, BufferInt& indices, float stiffness, float unitMass)
@@ -92,26 +139,29 @@ void PBDObject::CreateSingleDistConstr(BufferVector3f& positionBuffer, BufferInt
 	int count = 2;
 	for (int i = 0; i < indices.GetSize() / count; i++)
 	{
-		//init primList
+		// init primList
 		int2 p;
 		p.x = i * count;
 		p.y = count;
 		primList.m_Data.push_back(p);
-		//init stiffness
+		// init stiffness
 		constrPBDBuffer.stiffness.m_Data.push_back(stiffness);
-		//init rest length
+		// init rest length
 		int i0 = indices.m_Data[p.x];
 		int i1 = indices.m_Data[p.x + 1];
 		float d = Distance(positionBuffer.m_Data[i0], positionBuffer.m_Data[i1]);
 		constrPBDBuffer.restLength.m_Data.push_back(d);
-		//init mass
+		// init mass
 		constrPBDBuffer.mass.m_Data.push_back(unitMass);
 		constrPBDBuffer.mass.m_Data.push_back(unitMass);
-		//init contraint type
+		// init contraint type
 		constrPBDBuffer.constraintType.m_Data.push_back(DISTANCE);
+		// init color
+		constrPBDBuffer.color.m_Data.push_back(-1);
+		constrPBDBuffer.prdColor.m_Data.push_back(-1);
+		constrPBDBuffer.sortedColor.m_Data.push_back(-1);
 	}
 }
-
 
 void PBDObject::CreatePosition(BufferVector3f& positionBuffer, float2 cord, float sizeX, float sizeY, int resY, int resX)
 {
@@ -151,6 +201,177 @@ void PBDObject::CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX
 
 	}
 }
+
+void PBDObject::GenePoint2PrimsMap(Topology topol)
+{
+	auto primList =&(topol.primList);
+	auto indices = &(topol.indices);
+	for (int primId = 0; primId < primList->GetSize(); ++primId)
+	{
+		int2 currPrim = primList->m_Data[primId];
+		for (int i = 0; i < currPrim.y; ++i)
+		{
+			constrPBDBuffer.Point2PrimsMap[indices->m_Data[currPrim.x+i]].push_back(primId);
+		}
+	}
+}
+
+
+void PBDObject::GenePrim2PrimsMap(Topology topol)
+{
+	auto primList = &(topol.primList);
+	auto indices = &(topol.indices);
+	auto Point2PrimsMap = constrPBDBuffer.Point2PrimsMap;
+	auto Prim2PrimsMap = &(constrPBDBuffer.Prim2PrimsMap);
+	for (int primId = 0; primId < primList->GetSize(); ++primId)
+	{
+		//std::set<int> linkedPrimsSet;
+		std::vector<int> linkedPrimsSet;
+		int nptPrims = primList->m_Data[primId].y;
+		for (int ptId = 0; ptId < nptPrims; ++ptId)
+		{
+			int currPtId = indices->m_Data[primList->m_Data[primId].x + ptId];
+			// printf("primId: %d; ", primId);
+			auto linkedPrims = Point2PrimsMap[currPtId];
+			// printf("linked primtive id: ");
+			for (int nlp = 0; nlp < linkedPrims.size(); nlp++)
+			{
+				int linkPrimId = linkedPrims[nlp];
+				
+				if (linkPrimId == primId)
+					continue;
+				linkedPrimsSet.push_back(linkPrimId);
+			}			
+		}
+		Prim2PrimsMap->indices.m_Data.insert(
+			std::end(Prim2PrimsMap->indices.m_Data),
+			std::begin(linkedPrimsSet),
+			std::end(linkedPrimsSet));
+		Prim2PrimsMap->startNumList.m_Data.push_back(make_int2(Prim2PrimsMap->startNumList.GetSize(), linkedPrimsSet.size()));
+	}
+}
+
+void PBDObject::AssignColorsCPU()
+{
+	auto p2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
+	auto p2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
+	auto color = &(constrPBDBuffer.color);
+	auto prdColor = &(constrPBDBuffer.prdColor);
+	for (int idx = 0; idx < constrPBDBuffer.topol.primList.GetSize(); idx++)
+	{
+		if (idx == 0)
+			detectConflict = 0;
+
+		if (color->m_Data[idx] >= 0)
+			continue;
+
+		int nidx = p2pStartNumList->m_Data[idx].x;
+		int nlast = p2pStartNumList->m_Data[idx].x + p2pStartNumList->m_Data[idx].y;
+		int c = -1, offset = 0;
+		while (c < 0)
+		{
+			// Bit flag to store seen neighbor colors.
+			unsigned long forbidden = 0;
+			for (int i = nidx; i < nlast; ++i)
+			{
+				int n = p2pIndices->m_Data[i];
+				int nc = color->m_Data[n] - offset;
+				if (nc >= 0 && nc < FORBIDBITS)
+					forbidden |= (1ul << nc);
+			}
+			// Check if there's an open color in the current bitrange.
+			if (forbidden ^ MAXFORBID)
+			{
+				unsigned long x = forbidden;
+				c = offset;
+				// Find position of first zero bit.
+				x = (~x) & (x + 1);
+				// Color is log2(x)
+				while (x > 1)
+				{
+					x /= 2;
+					c++;
+				}
+			}
+			else
+			{
+				// Otherwise we need to try again with the next range of colors.
+				offset += FORBIDBITS;
+			}
+		}
+		// Record speculative coloring.
+		prdColor->m_Data[idx] = c;
+	}
+}
+
+void PBDObject::ResolveConflictsCPU()
+{
+	auto primList = &(constrPBDBuffer.topol.primList);
+	auto p2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
+	auto p2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
+	auto color = &(constrPBDBuffer.color);
+	auto prdColor = &(constrPBDBuffer.prdColor);
+
+	for (int idx = 0; idx < primList->GetSize(); ++idx)
+	{
+		// Nothing to do if already colored.
+		if (color->m_Data[idx] >= 0)
+			continue;
+
+		int nidx = p2pStartNumList->m_Data[idx].x;
+		int nlast = p2pStartNumList->m_Data[idx].x + p2pStartNumList->m_Data[idx].y;
+		int c = prdColor->m_Data[idx];
+		//int c = newcolor[idx];
+		int conflict = 0;
+		int npt = primList->m_Data[idx].y;
+
+		for (int i = nidx; i < nlast; ++i)
+		{
+			int n = p2pIndices->m_Data[i];
+			int pc = prdColor->m_Data[n];
+
+			// Check for conflict.
+			if (pc == c)
+			{
+				int nnpt = primList->m_Data[n].y;
+				// Resolution gives preference to primitives with more points, 
+				// otherwise the one that comes first.
+				// (NOTE: We color in fewer iterations if we prioritize by number
+				// of graph neighbors, but then assuming we process prims by color,
+				// we're usually farther away from original point order leading to many
+				// cache misses and slower downstream processing.)
+				if (nnpt > npt ||
+					(nnpt == npt && n < idx))
+				{
+					conflict = 1;
+					break;
+				}
+			}
+		}
+
+		// If there's a conflict then reset sizes for more work,
+		// otherewise accept speculative color.
+		if (conflict)
+		{
+			detectConflict = primList->GetSize();
+			break;
+		}
+		else
+			color->m_Data[idx] = c;
+
+	}
+}
+void PBDObject::EdgeColoring(int iterations)
+{
+	for (int i = 0; i < iterations; ++i)
+	{
+		AssignColorsCPU();
+		ResolveConflictsCPU();
+		if (detectConflict == 0)
+			break;
+   }
+}
+
 
 void SolverPBD::Advect(float dt, HardwareType ht)
 {
@@ -318,5 +539,3 @@ void SolverPBD::Integration(float dt, HardwareType ht)
 		break;
 	}
 }
-
-

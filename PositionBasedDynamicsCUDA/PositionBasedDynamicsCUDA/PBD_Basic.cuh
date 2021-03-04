@@ -1,8 +1,11 @@
 #ifndef PBD_BASIC_H
 #define PBD_BASIC_H
 
-
+#include <iostream>
+#include<fstream>
 #include<vector>
+#include <map>
+#include <set>
 #include<assert.h>
 #include<vector_types.h>
 #include<vector_functions.h>
@@ -13,6 +16,8 @@
 using namespace std;
 
 #define KERNEL_FUNC __device__ __host__ 
+#define FORBIDBITS 64
+#define MAXFORBID 18446744073709551615ul
 
 //KERNEL_FUNC float Length(float3 vec) pow(vec.x*vec.x + vec.y *vec.y + vec.z *vec.z, 0.5)
 
@@ -38,10 +43,32 @@ enum HardwareType
 	NUMHARDWARE
 };
 
+enum Color
+{
+	RED,
+	GREEN,
+	BLUE,
+	PINK,
+	NUMCOLOR
+};
+
+inline std::ofstream& operator<<(std::ofstream& ofs, float3& val)
+{
+	ofs << val.x << "," << val.y << "," << val.z;
+	return ofs;
+}
+
+inline std::ofstream& operator<<(std::ofstream& ofs, int2& val)
+{
+	ofs << val.x << "," << val.y;
+	return ofs;
+}
+
 template<class T>
 class Buffer
 {
 public:
+	typedef T ThisType;
 	void LoadToGPU();
 	void LoadToCPU();
 	vector<T> m_Data;
@@ -54,9 +81,25 @@ public:
 
 	uint2 EvalBlockSize(int nThread) { return make_uint2(ceil((float)m_Size / nThread), nThread); }
 
-private:
-	void* m_DevicePtr;
+	void Save(std::ofstream& os)
+	{
+		if (m_sName.size() == 0)
+			return;
+		if (!os)
+			return;
+		os << m_sName << "|" << typeid(T).name() << "|";
+		for (int i = 0; i < m_Data.size(); i++)
+			os << m_Data[i] << ";";
+		os << std::endl;
+	}
 
+	void SetName(std::string n)
+	{
+		m_sName = n;
+	}
+private:
+	std::string m_sName;
+	void* m_DevicePtr;
 };
 
 typedef Buffer<int> BufferInt;
@@ -64,6 +107,12 @@ typedef Buffer<unsigned int> BufferUInt;
 typedef Buffer<float> BufferFloat;
 typedef Buffer<float3> BufferVector3f;
 typedef Buffer<int2> BufferInt2;
+
+struct P2P
+{
+	BufferInt indices;
+	BufferInt2 startNumList;  // store start and number of neighbor points
+};
 
 struct Topology 
 {
@@ -82,17 +131,14 @@ struct ConstraintPBD
 	//BufferFloat thickness;
 	BufferFloat stiffness;
 	BufferInt constraintType;
+	// Util Maps
+	std::map<int, std::vector<int>> Point2PrimsMap;
+	P2P Prim2PrimsMap; 
 
 	BufferInt color; // reserved for edge coloring
+	BufferInt prdColor; // reserved for edge coloring
 	BufferInt sortedColor;  // reserved for edge coloring
 };
-
-struct P2P
-{
-	BufferInt neighbourIndices;
-	BufferInt2 pointMap;  // store start and number of neighbor points
-};
-
 
 
 class PBDObject
@@ -131,13 +177,21 @@ public:
 	
 	
 private:
+	int detectConflict;
 	void Init();
 	void CreatePosition(BufferVector3f& positionBuffer, float2 cord, float sizeX, float sizeY, int resY, int resX);
 	void CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX);
 	void CreateDistanceIndices(BufferInt& indices, int resY, int resX);
 	void CreateSingleDistConstr(BufferVector3f& positionBuffer, BufferInt2& primList, BufferInt& indices, float stiffness, float unitMass);
-	//to do
-	void EdgeColoring();
+
+	// init two maps for edge coloring
+	void GenePoint2PrimsMap(Topology topol);
+	void GenePrim2PrimsMap(Topology topol);
+
+	// TODO: Edge Coloring 
+	void AssignColorsCPU();
+	void ResolveConflictsCPU();
+	void EdgeColoring(int iterations);
 	void SortEdgesColors();
 
 };
