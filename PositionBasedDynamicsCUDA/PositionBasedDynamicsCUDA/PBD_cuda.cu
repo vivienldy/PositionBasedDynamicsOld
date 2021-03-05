@@ -393,8 +393,32 @@ void PBDObject::EdgeColoring(int iterations)
 {
 	for (int i = 0; i < iterations; ++i)
 	{
+		printf("iteration %d color: ", i);
+		for (int i = 0; i < constrPBDBuffer.color.GetSize(); ++i)
+		{
+			printf("%d // ", constrPBDBuffer.color.m_Data[i]);
+		}
+		printf("\n");
+		printf("iteration %d prd color: ", i);
+		for (int i = 0; i < constrPBDBuffer.color.GetSize(); ++i)
+		{
+			printf("%d // ", constrPBDBuffer.color.m_Data[i]);
+		}
+		printf("\n");
 		AssignColorsCPU();
 		ResolveConflictsCPU();
+		printf("iteration %d color: ", i);
+		for (int i = 0; i < constrPBDBuffer.color.GetSize(); ++i)
+		{
+			printf("%d // ", constrPBDBuffer.color.m_Data[i]);
+		}
+		printf("\n");
+		printf("iteration %d prd color: ", i);
+		for (int i = 0; i < constrPBDBuffer.color.GetSize(); ++i)
+		{
+			printf("%d // ", constrPBDBuffer.color.m_Data[i]);
+		}
+		printf("\n");
 		if (detectConflict == 0)
 			break;
 		string fileName = "D:/colorEdge/color." + to_string(i) + ".cache";
