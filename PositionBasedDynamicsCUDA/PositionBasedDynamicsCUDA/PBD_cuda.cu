@@ -1,5 +1,5 @@
 #include "PBD_Basic.cuh"
-#include <iostream>
+
 
 float Distance(float3 p1, float3 p2)
 {
@@ -7,17 +7,35 @@ float Distance(float3 p1, float3 p2)
 }
 // ----------------------------------------------------------------------------------------
 
+void PBDObject::groundTruthTest()
+{
+	vector<int> arr0 = { 0, 1, 3, 3, 2, 0 };
+	vector<int> arr1 = {0,3,0,1,0,2,1,3,2,3};
+	constrPBDBuffer.topol.indices.m_Data = arr1;
+	vector<int2> arr2 = { make_int2(0,2),  make_int2(2,2),  make_int2(4,2),  make_int2(6,2),  make_int2(8,2) };
+	constrPBDBuffer.topol.primList.m_Data = arr2;
+	vector<int> arr3 = { -1,-1,-1,-1,-1 };
+	constrPBDBuffer.color.m_Data = arr3;
+	constrPBDBuffer.prdColor.m_Data = arr3;
+}
+
+// ----------------------------------------------------------------------------------------
+
+
+
 void PBDObject::Init()
 {
 	// OpenGL Topology
-	meshTopol.indices.SetName("TopolIndices");
-	meshTopol.posBuffer.SetName("TopolPosBuffer");
-	meshTopol.primList.SetName("TopolPrimList");
+	meshTopol.indices.SetName("Indices");
+	meshTopol.posBuffer.SetName("P");
+	meshTopol.primList.SetName("primList");
 
 	CreatePosition(meshTopol.posBuffer, make_float2(0.0, 0.0), sizeX, sizeY, resY, resX);
-	CreateOpenGLIndices(meshTopol.indices, resY, resX);
+	//CreateOpenGLIndices(meshTopol.indices, resY, resX);
 	float stiffnessBuff[1] = { 1.0f };
+	groundTruthTest();
 	InitConstr(1, 1.0f, stiffnessBuff);
+	
 }
 
 void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnesses)
@@ -26,7 +44,10 @@ void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnes
 	constrPBDBuffer.prdPBuffer = meshTopol.posBuffer;
 	constrPBDBuffer.velBuffer.m_Data.resize(constrPBDBuffer.prdPBuffer.GetSize(), make_float3(0.0f, 0.0f, 0.0f));
 
-	constrPBDBuffer.topol.primList.SetName("ConstrPrimList");
+	constrPBDBuffer.topol.primList.SetName("primList");
+	constrPBDBuffer.topol.indices.SetName("Indices");
+	constrPBDBuffer.color.SetName("color");
+	constrPBDBuffer.prdColor.SetName("color");
 	/*for (int i = 0; i < 3; i++)
 	{
 		printf("postion Buffer: %f, %f, %f \n", constrPBDBuffer.topol.posBuffer.m_Data[i].x, constrPBDBuffer.topol.posBuffer.m_Data[i].y, constrPBDBuffer.topol.posBuffer.m_Data[i].z);
@@ -39,11 +60,11 @@ void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnes
 		switch (i)
 		{
 		case DISTANCE:
-			CreateDistanceIndices(constrPBDBuffer.topol.indices, resY, resX);
-			CreateSingleDistConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, stiffnesses[DISTANCE], unitMass);
+			//CreateDistanceIndices(constrPBDBuffer.topol.indices, resY, resX);
+			//CreateSingleDistConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, stiffnesses[DISTANCE], unitMass);
 			GenePoint2PrimsMap(constrPBDBuffer.topol);
 			GenePrim2PrimsMap(constrPBDBuffer.topol);
-			EdgeColoring(10);
+			EdgeColoring(1000);
 			/*printf("Indices: \n");
 			printf("\t");
 			for (int i = 0; i < constrPBDBuffer.topol.indices.GetSize(); ++i)
@@ -62,7 +83,7 @@ void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnes
 				}
 				printf("\n");
 			}
-
+*/
 			printf("\nPrim2PrimsMap: \n");
 			printf("size of prim2prims indices%d-", constrPBDBuffer.Prim2PrimsMap.indices.GetSize());
 			printf("\n");
@@ -74,7 +95,7 @@ void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnes
 			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.startNumList.GetSize(); ++i)
 			{
 				printf("startIdx: %d, neighbour Num: %d\n", constrPBDBuffer.Prim2PrimsMap.startNumList.m_Data[i].x, constrPBDBuffer.Prim2PrimsMap.startNumList.m_Data[i].y);
-			}*/
+			}
 
 			/*printf("primMap (size: %d): ",constrPBDBuffer.Prim2PrimsMap.size());
 			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.size(); ++i)
@@ -204,6 +225,7 @@ void PBDObject::CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX
 
 void PBDObject::GenePoint2PrimsMap(Topology topol)
 {
+	printf("entered gen point2prims\n");
 	auto primList =&(topol.primList);
 	auto indices = &(topol.indices);
 	for (int primId = 0; primId < primList->GetSize(); ++primId)
@@ -214,11 +236,13 @@ void PBDObject::GenePoint2PrimsMap(Topology topol)
 			constrPBDBuffer.Point2PrimsMap[indices->m_Data[currPrim.x+i]].push_back(primId);
 		}
 	}
+	printf("end gen point2prims\n");
 }
 
 
 void PBDObject::GenePrim2PrimsMap(Topology topol)
 {
+	printf("entered gen Prim2PrimsMap\n");
 	auto primList = &(topol.primList);
 	auto indices = &(topol.indices);
 	auto Point2PrimsMap = constrPBDBuffer.Point2PrimsMap;
@@ -243,12 +267,14 @@ void PBDObject::GenePrim2PrimsMap(Topology topol)
 				linkedPrimsSet.push_back(linkPrimId);
 			}			
 		}
+		int startIdx = Prim2PrimsMap->indices.GetSize();
 		Prim2PrimsMap->indices.m_Data.insert(
 			std::end(Prim2PrimsMap->indices.m_Data),
 			std::begin(linkedPrimsSet),
 			std::end(linkedPrimsSet));
-		Prim2PrimsMap->startNumList.m_Data.push_back(make_int2(Prim2PrimsMap->startNumList.GetSize(), linkedPrimsSet.size()));
+		Prim2PrimsMap->startNumList.m_Data.push_back(make_int2(startIdx, linkedPrimsSet.size()));
 	}
+	printf("end gen Prim2PrimsMap\n");
 }
 
 void PBDObject::AssignColorsCPU()
@@ -266,7 +292,8 @@ void PBDObject::AssignColorsCPU()
 			continue;
 
 		int nidx = p2pStartNumList->m_Data[idx].x;
-		int nlast = p2pStartNumList->m_Data[idx].x + p2pStartNumList->m_Data[idx].y;
+		//int nlast = p2pStartNumList->m_Data[idx].x + p2pStartNumList->m_Data[idx].y;
+		int nlast = p2pStartNumList->m_Data[idx].x+ p2pStartNumList->m_Data[idx].y;
 		int c = -1, offset = 0;
 		while (c < 0)
 		{
@@ -285,7 +312,7 @@ void PBDObject::AssignColorsCPU()
 				unsigned long x = forbidden;
 				c = offset;
 				// Find position of first zero bit.
-				x = (~x) & (x + 1);
+					x = (~x) & (x + 1);
 				// Color is log2(x)
 				while (x > 1)
 				{
@@ -361,6 +388,7 @@ void PBDObject::ResolveConflictsCPU()
 
 	}
 }
+
 void PBDObject::EdgeColoring(int iterations)
 {
 	for (int i = 0; i < iterations; ++i)
@@ -369,8 +397,16 @@ void PBDObject::EdgeColoring(int iterations)
 		ResolveConflictsCPU();
 		if (detectConflict == 0)
 			break;
-   }
+		string fileName = "D:/colorEdge/color." + to_string(i) + ".cache";
+		IO::SaveBuffer(constrPBDBuffer.prdColor, fileName);
+		cout << "color saved" << endl;	
+	}
 }
+
+//
+//  iteartion
+//	
+//
 
 
 void SolverPBD::Advect(float dt, HardwareType ht)

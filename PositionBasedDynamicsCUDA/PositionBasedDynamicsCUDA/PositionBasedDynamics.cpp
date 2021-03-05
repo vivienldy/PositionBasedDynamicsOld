@@ -1,8 +1,6 @@
 #include <glad/glad.h> 
 #include <GLFW/glfw3.h>
 #include<shader/shader_m.h>
-#include <iostream>
-#include<fstream>
 #include<vector>
 #include <string>
 #include <glm/glm.hpp>
@@ -16,37 +14,7 @@
 
 using namespace std;
 
-namespace IO
-{
-    template <typename S>
-    void SaveBuffer(Buffer<S>& buffer, std::ofstream& ofs)
-    {
-        buffer.Save(ofs);
-    }
 
-    template <typename S>
-    void SaveBuffer(Buffer<S>& buffer, std::string path)
-    {
-        std::ofstream ofs(path);
-        if (!ofs.is_open())
-            return;
-        buffer.Save(ofs);
-    }
-
-    void SaveToplogy(Topology top, std::string path)
-    {
-        std::ofstream ofs(path);
-        if (!ofs.is_open())
-            return;
-
-        SaveBuffer<int>(top.indices, ofs);
-        SaveBuffer<float3>(top.posBuffer, ofs);
-        SaveBuffer<int2>(top.primList, ofs);
-
-        ofs.flush();
-        ofs.close();
-    }
-}
 
 /*
     CPU Run
@@ -96,11 +64,11 @@ for(auto workset: workSets)
 
 int main()
 { 
-    int resY = 5;
-    int resX = 5;
+    int resY = 2;
+    int resX = 2;
     float dampingRate = 0.9f;
-    float sizeX = 48.0f;
-    float sizeY = 64.0f;
+    float sizeX = 5.0f;
+    float sizeY = 5.0f;
     float3 gravity = make_float3(0.0, -10.0, 0.0);
     int startFrame = 1;
     int endFrame = 200;
@@ -113,8 +81,17 @@ int main()
     PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY);
     solver.SetTarget(&pbdObj);
 
-    //pbdObj.meshTopol.primList = pbdObj.constrPBDBuffer.topol.primList;
-    //IO::SaveToplogy(pbdObj.meshTopol, "D:/op.cache");
+    pbdObj.meshTopol.indices = pbdObj.constrPBDBuffer.topol.indices;
+    pbdObj.meshTopol.primList = pbdObj.constrPBDBuffer.topol.primList;
+    for (int i = 0; i < pbdObj.constrPBDBuffer.topol.indices.GetSize(); ++i)
+    {
+        printf("%d-", pbdObj.constrPBDBuffer.topol.indices.m_Data[i]);
+    }
+    printf("\n");
+    IO::SaveToplogy(pbdObj.meshTopol, "D:/colorEdge/topol.cache");
+    cout << "topol saved" << endl;
+    IO::SaveBuffer(pbdObj.constrPBDBuffer.color, "D:/colorEdge/color.cache");
+    cout << "color saved" << endl;
 
    // solver.SetTarget(PBDObject::Create("E:/top.cache","E:/cc.cache"));
 

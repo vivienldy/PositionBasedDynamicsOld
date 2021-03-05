@@ -5,6 +5,7 @@
 #include<fstream>
 #include<vector>
 #include <map>
+#include <string>
 #include <set>
 #include<assert.h>
 #include<vector_types.h>
@@ -167,6 +168,8 @@ public:
 	//}
 	void InitConstr(int numOfConstr, float unitMass, float* stiffnesses);
 
+	void groundTruthTest();
+
 	Topology meshTopol;  // opengl will draw this topol
 	ConstraintPBD constrPBDBuffer;
 	BufferVector3f restPosBuffer;
@@ -215,6 +218,41 @@ public:
 private:
 	PBDObject* pbdObj;
 };
+
+namespace IO
+{
+	template <typename S>
+	inline void SaveBuffer(Buffer<S>& buffer, std::ofstream& ofs)
+	{
+		buffer.Save(ofs);
+	}
+
+	template <typename S>
+	inline void SaveBuffer(Buffer<S>& buffer, std::string path)
+	{
+		std::ofstream ofs(path);
+		if (!ofs.is_open())
+			return;
+		buffer.Save(ofs);
+	}
+
+	inline void SaveToplogy(Topology top, std::string path)
+	{
+		std::ofstream ofs(path);
+		if (!ofs.is_open())
+			return;
+		for (int i = 0; i < top.indices.GetSize(); ++i)
+		{
+			printf("%d-", top.indices.m_Data[i]);
+		}
+		SaveBuffer<int>(top.indices, ofs);
+		SaveBuffer<float3>(top.posBuffer, ofs);
+		SaveBuffer<int2>(top.primList, ofs);
+
+		ofs.flush();
+		ofs.close();
+	}
+}
 //
 // 
 //namespace Kernel
