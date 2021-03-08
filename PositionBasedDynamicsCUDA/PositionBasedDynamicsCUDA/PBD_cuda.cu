@@ -1,16 +1,15 @@
 #include "PBD_Basic.cuh"
 
-
 float Distance(float3 p1, float3 p2)
 {
 	return powf(powf((p1.x - p2.x), 2) + powf((p1.y - p2.y), 2) + powf((p1.z - p2.z), 2), 0.5);
 }
 // ----------------------------------------------------------------------------------------
-
+// PBDObject class
 void PBDObject::groundTruthTest()
 {
 	vector<int> arr0 = { 0, 1, 3, 3, 2, 0 };
-	vector<int> arr1 = {0,3,0,1,0,2,1,3,2,3};
+	vector<int> arr1 = { 0,3,0,1,0,2,1,3,2,3 };
 	constrPBDBuffer.topol.indices.m_Data = arr1;
 	vector<int2> arr2 = { make_int2(0,2),  make_int2(2,2),  make_int2(4,2),  make_int2(6,2),  make_int2(8,2) };
 	constrPBDBuffer.topol.primList.m_Data = arr2;
@@ -18,10 +17,6 @@ void PBDObject::groundTruthTest()
 	constrPBDBuffer.color.m_Data = arr3;
 	constrPBDBuffer.prdColor.m_Data = arr3;
 }
-
-// ----------------------------------------------------------------------------------------
-
-
 
 void PBDObject::Init()
 {
@@ -31,12 +26,68 @@ void PBDObject::Init()
 	meshTopol.primList.SetName("primList");
 
 	CreatePosition(meshTopol.posBuffer, make_float2(0.0, 0.0), sizeX, sizeY, resY, resX);
-	//CreateOpenGLIndices(meshTopol.indices, resY, resX);
+	CreateOpenGLIndices(meshTopol.indices, resY, resX);
 	float stiffnessBuff[1] = { 1.0f };
-	groundTruthTest();
+	// groundTruthTest();
 	InitConstr(1, 1.0f, stiffnessBuff);
-	
+	if (this->ht == GPU)
+		initGPUBuffers();
 }
+
+void PBDObject::initGPUBuffers()
+{
+	printf("init GPU buffers\n");
+	auto primList = &(constrPBDBuffer.topol.primList);
+	auto p2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
+	auto p2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
+	auto color = &(constrPBDBuffer.color);
+	auto prdColor = &(constrPBDBuffer.prdColor);
+
+	auto velBuffer = &(constrPBDBuffer.velBuffer);
+	auto prdPBuffer = &(constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(meshTopol.posBuffer);
+
+	// Host To Device: load buffers for Edge Coloring
+	cudaMalloc((void**)&dFlag, sizeof(int));
+	cudaError_t cudaStatus = cudaMemcpy(dFlag, &detectConflict, sizeof(int), cudaMemcpyHostToDevice);
+	if (cudaStatus == cudaSuccess)  printf("\nMalloc and loads succeeded!\n");
+
+	primList->MallocAndLoadToDevice();  // topolPrimList
+	p2pIndices->MallocAndLoadToDevice();  // p2pIndices
+	p2pStartNumList->MallocAndLoadToDevice();  // p2pStartNumList
+	color->MallocAndLoadToDevice();  // color
+	prdColor->MallocAndLoadToDevice();  // prdColor
+
+	velBuffer->MallocAndLoadToDevice(); // velocity Buffer
+	prdPBuffer->MallocAndLoadToDevice();  // predicted position buffer
+	positionBuffer->MallocAndLoadToDevice();  // point real position buffer
+}
+
+void PBDObject::freeGPUBuffers()
+{
+	auto primList = &(constrPBDBuffer.topol.primList);
+	auto p2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
+	auto p2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
+	auto color = &(constrPBDBuffer.color);
+	auto prdColor = &(constrPBDBuffer.prdColor);
+
+	auto velBuffer = &(constrPBDBuffer.velBuffer);
+	auto prdPBuffer = &(constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(meshTopol.posBuffer);
+
+	cudaFree(dFlag);
+
+	cudaFree(primList->GetDevicePtr());
+	cudaFree(p2pIndices->GetDevicePtr());
+	cudaFree(p2pStartNumList->GetDevicePtr());
+	cudaFree(color->GetDevicePtr());
+	cudaFree(prdColor->GetDevicePtr());
+
+	cudaFree(velBuffer->GetDevicePtr());
+	cudaFree(prdPBuffer->GetDevicePtr());
+	cudaFree(positionBuffer->GetDevicePtr());
+}
+
 
 void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnesses)
 {
@@ -60,54 +111,13 @@ void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnes
 		switch (i)
 		{
 		case DISTANCE:
-			//CreateDistanceIndices(constrPBDBuffer.topol.indices, resY, resX);
-			//CreateSingleDistConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, stiffnesses[DISTANCE], unitMass);
+			CreateDistanceIndices(constrPBDBuffer.topol.indices, resY, resX);
+			CreateSingleDistConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, stiffnesses[DISTANCE], unitMass);
 			GenePoint2PrimsMap(constrPBDBuffer.topol);
 			GenePrim2PrimsMap(constrPBDBuffer.topol);
-			EdgeColoring(1000);
-			/*printf("Indices: \n");
-			printf("\t");
-			for (int i = 0; i < constrPBDBuffer.topol.indices.GetSize(); ++i)
-			{
-				printf("%d-", constrPBDBuffer.topol.indices.m_Data[i]);
-			}
-			printf("\nPoint2PrimsMap: \n");
-			
-			for (int i = 0; i < constrPBDBuffer.Point2PrimsMap.size(); ++i)
-			{
-				printf("\t");
-				printf("point %d (size: %d): ", i, constrPBDBuffer.Point2PrimsMap[i].size());
-				for (int j = 0; j < constrPBDBuffer.Point2PrimsMap[i].size(); ++j)
-				{
-					printf("%d-", constrPBDBuffer.Point2PrimsMap[i][j]);
-				}
-				printf("\n");
-			}
-*/
-			printf("\nPrim2PrimsMap: \n");
-			printf("size of prim2prims indices%d-", constrPBDBuffer.Prim2PrimsMap.indices.GetSize());
-			printf("\n");
-			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.indices.GetSize(); ++i)
-			{
-				printf("%d-", constrPBDBuffer.Prim2PrimsMap.indices.m_Data[i]);
-			}
-			printf("\n");
-			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.startNumList.GetSize(); ++i)
-			{
-				printf("startIdx: %d, neighbour Num: %d\n", constrPBDBuffer.Prim2PrimsMap.startNumList.m_Data[i].x, constrPBDBuffer.Prim2PrimsMap.startNumList.m_Data[i].y);
-			}
-
-			/*printf("primMap (size: %d): ",constrPBDBuffer.Prim2PrimsMap.size());
-			for (int i = 0; i < constrPBDBuffer.Prim2PrimsMap.size(); ++i)
-			{
-				printf("\t");
-				printf("prim %d (size: %d): ", i, constrPBDBuffer.Prim2PrimsMap[i].size());
-				for  (auto it = constrPBDBuffer.Prim2PrimsMap[i].begin(); it != constrPBDBuffer.Prim2PrimsMap[i].end(); ++it)
-				{
-					printf("%d-", *it);
-				}
-				printf("\n");
-			}*/
+			if (ht == GPU)
+				initGPUBuffers();
+			EdgeColoring(20000);
 			break;
 		case BENDING:
 			break;
@@ -202,8 +212,8 @@ void PBDObject::CreatePosition(BufferVector3f& positionBuffer, float2 cord, floa
 			index++;
 		}
 	}
-	restPosBuffer.m_Data.push_back(positionBuffer.m_Data[0]) ; 
-	restPosBuffer.m_Data.push_back(positionBuffer.m_Data[resX-1]) ; 
+	restPosBuffer.m_Data.push_back(positionBuffer.m_Data[0]);
+	restPosBuffer.m_Data.push_back(positionBuffer.m_Data[resX - 1]);
 }
 
 void PBDObject::CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX)
@@ -214,35 +224,36 @@ void PBDObject::CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX
 		if (i % resX == resX - 1)
 			continue;
 		openGLIndices.m_Data.push_back(i);
-		openGLIndices.m_Data.push_back(i + resX + 1);
 		openGLIndices.m_Data.push_back(i + resX);
-		openGLIndices.m_Data.push_back(i);
-		openGLIndices.m_Data.push_back(i + 1);
 		openGLIndices.m_Data.push_back(i + resX + 1);
-
+		openGLIndices.m_Data.push_back(i);
+		openGLIndices.m_Data.push_back(i + resX + 1);
+		openGLIndices.m_Data.push_back(i + 1);
 	}
+	/*printf("OpenGL indices: ");
+	for (int i = 0; i < openGLIndices.GetSize(); ++i)
+	{
+		printf("%d", openGLIndices.m_Data[i]);
+	}*/
 }
 
 void PBDObject::GenePoint2PrimsMap(Topology topol)
 {
-	printf("entered gen point2prims\n");
-	auto primList =&(topol.primList);
+	auto primList = &(topol.primList);
 	auto indices = &(topol.indices);
 	for (int primId = 0; primId < primList->GetSize(); ++primId)
 	{
 		int2 currPrim = primList->m_Data[primId];
 		for (int i = 0; i < currPrim.y; ++i)
 		{
-			constrPBDBuffer.Point2PrimsMap[indices->m_Data[currPrim.x+i]].push_back(primId);
+			constrPBDBuffer.Point2PrimsMap[indices->m_Data[currPrim.x + i]].push_back(primId);
 		}
 	}
-	printf("end gen point2prims\n");
 }
 
 
 void PBDObject::GenePrim2PrimsMap(Topology topol)
 {
-	printf("entered gen Prim2PrimsMap\n");
 	auto primList = &(topol.primList);
 	auto indices = &(topol.indices);
 	auto Point2PrimsMap = constrPBDBuffer.Point2PrimsMap;
@@ -261,11 +272,11 @@ void PBDObject::GenePrim2PrimsMap(Topology topol)
 			for (int nlp = 0; nlp < linkedPrims.size(); nlp++)
 			{
 				int linkPrimId = linkedPrims[nlp];
-				
+
 				if (linkPrimId == primId)
 					continue;
 				linkedPrimsSet.push_back(linkPrimId);
-			}			
+			}
 		}
 		int startIdx = Prim2PrimsMap->indices.GetSize();
 		Prim2PrimsMap->indices.m_Data.insert(
@@ -274,7 +285,6 @@ void PBDObject::GenePrim2PrimsMap(Topology topol)
 			std::end(linkedPrimsSet));
 		Prim2PrimsMap->startNumList.m_Data.push_back(make_int2(startIdx, linkedPrimsSet.size()));
 	}
-	printf("end gen Prim2PrimsMap\n");
 }
 
 void PBDObject::AssignColorsCPU()
@@ -293,7 +303,7 @@ void PBDObject::AssignColorsCPU()
 
 		int nidx = p2pStartNumList->m_Data[idx].x;
 		//int nlast = p2pStartNumList->m_Data[idx].x + p2pStartNumList->m_Data[idx].y;
-		int nlast = p2pStartNumList->m_Data[idx].x+ p2pStartNumList->m_Data[idx].y;
+		int nlast = p2pStartNumList->m_Data[idx].x + p2pStartNumList->m_Data[idx].y;
 		int c = -1, offset = 0;
 		while (c < 0)
 		{
@@ -312,7 +322,7 @@ void PBDObject::AssignColorsCPU()
 				unsigned long x = forbidden;
 				c = offset;
 				// Find position of first zero bit.
-					x = (~x) & (x + 1);
+				x = (~x) & (x + 1);
 				// Color is log2(x)
 				while (x > 1)
 				{
@@ -389,11 +399,147 @@ void PBDObject::ResolveConflictsCPU()
 	}
 }
 
+// kernel functions for PBDObj class
+void __global__ AssignColorsGPU(
+	int2* topolPrimList,
+	int* p2pIndices,
+	int2* p2pStartNumList,
+	int* color,
+	int* prdColor,
+	int* detectConflict,
+	int worksetLength)
+{
+
+	int primId = blockIdx.x * blockDim.x + threadIdx.x;
+	// if(primId < 5) printf("%d: entering kernel1\n", primId);
+
+	if (primId >= worksetLength)
+		return;
+
+	if (primId == 0)
+		*detectConflict = 0;
+
+	if (color[primId] >= 0)
+		return;
+
+	int nidx = p2pStartNumList[primId].x;
+	int nlast = p2pStartNumList[primId].x + p2pStartNumList[primId].y;
+	int c = -1, offset = 0;
+	while (c < 0)
+	{
+		// Bit flag to store seen neighbor colors.
+		unsigned long forbidden = 0;
+		for (int i = nidx; i < nlast; ++i)
+		{
+			int n = p2pIndices[i];
+			int nc = color[n] - offset;
+			if (nc >= 0 && nc < FORBIDBITS)
+				forbidden |= (1ul << nc);
+		}
+		// Check if there's an open color in the current bitrange.
+		if (forbidden ^ MAXFORBID)
+		{
+			unsigned long x = forbidden;
+			c = offset;
+			// Find position of first zero bit.
+			x = (~x) & (x + 1);
+			// Color is log2(x)
+			while (x > 1)
+			{
+				x /= 2;
+				c++;
+			}
+		}
+		else
+		{
+			// Otherwise we need to try again with the next range of colors.
+			offset += FORBIDBITS;
+		}
+	}
+	// Record speculative coloring.
+	prdColor[primId] = c;
+	// if (primId < 5) printf("\tAssignColorsGPU-%d: prdColor %d\n", primId, prdColor[primId]);
+}
+
+void __global__ ResolveConflictsGPU(
+	int2* topolPrimList,
+	int* p2pIndices,
+	int2* p2pStartNumList,
+	int* color,
+	int* prdColor,
+	int* detectConflict,
+	int worksetLength)
+{
+
+	int primId = blockIdx.x * blockDim.x + threadIdx.x;
+	// if(primId < 5) printf("\tResolveConflictsGPU-%d: prdColor %d\n", primId, prdColor[primId]);
+
+	if (primId >= worksetLength)
+		return;
+
+	if (color[primId] >= 0)
+		return;
+
+	int nidx = p2pStartNumList[primId].x;
+	int nlast = p2pStartNumList[primId].x + p2pStartNumList[primId].y;
+	int c = prdColor[primId];
+
+	int conflict = 0;
+	int npt = topolPrimList[primId].y;
+
+	for (int i = nidx; i < nlast; ++i)
+	{
+		int n = p2pIndices[i];
+		int pc = prdColor[n];
+
+		// Check for conflict.
+		if (pc == c)
+		{
+			int nnpt = topolPrimList[n].y;
+			// Resolution gives preference to primitives with more points, 
+			// otherwise the one that comes first.
+			// (NOTE: We color in fewer iterations if we prioritize by number
+			// of graph neighbors, but then assuming we process prims by color,
+			// we're usually farther away from original point order leading to many
+			// cache misses and slower downstream processing.)
+			if (nnpt > npt ||
+				(nnpt == npt && n < primId))
+			{
+				conflict = 1;
+				break;
+			}
+		}
+	}
+
+	// If there's a conflict then reset sizes for more work,
+	// otherewise accept speculative color.
+	if (conflict)
+		*detectConflict = worksetLength;
+	else
+		color[primId] = c;
+
+}
+
 void PBDObject::EdgeColoring(int iterations)
+{
+	switch (ht)
+	{
+	case CPU:
+		EdgeColoringCPU(iterations);
+		break;
+	case GPU:
+		EdgeColoringGPU(iterations);
+		break;
+	default:
+		break;
+	}
+}
+
+void PBDObject::EdgeColoringCPU(int iterations)
 {
 	for (int i = 0; i < iterations; ++i)
 	{
-		printf("iteration %d color: ", i);
+		/*printf("Before iteration %d color: ", i);
 		for (int i = 0; i < constrPBDBuffer.color.GetSize(); ++i)
 		{
 			printf("%d // ", constrPBDBuffer.color.m_Data[i]);
@@ -404,10 +550,10 @@ void PBDObject::EdgeColoring(int iterations)
 		{
 			printf("%d // ", constrPBDBuffer.color.m_Data[i]);
 		}
-		printf("\n");
+		printf("\n");*/
 		AssignColorsCPU();
 		ResolveConflictsCPU();
-		printf("iteration %d color: ", i);
+		/*printf("After iteration %d color: ", i);
 		for (int i = 0; i < constrPBDBuffer.color.GetSize(); ++i)
 		{
 			printf("%d // ", constrPBDBuffer.color.m_Data[i]);
@@ -423,52 +569,213 @@ void PBDObject::EdgeColoring(int iterations)
 			break;
 		string fileName = "D:/colorEdge/color." + to_string(i) + ".cache";
 		IO::SaveBuffer(constrPBDBuffer.prdColor, fileName);
-		cout << "color saved" << endl;	
+		cout << "color saved" << endl;
+		printf("\n");*/
 	}
 }
 
-//
-//  iteartion
-//	
-//
-
-
-void SolverPBD::Advect(float dt, HardwareType ht)
+void PBDObject::EdgeColoringGPU(int iterations)
 {
-	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
-	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
-	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
-	switch (ht)
+	auto primList = &(constrPBDBuffer.topol.primList);
+	int primNum = primList->GetSize();
+	auto p2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
+	auto p2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
+	auto color = &(constrPBDBuffer.color);
+	auto prdColor = &(constrPBDBuffer.prdColor);
+
+	uint2 blockSize = primList->EvalBlockSize(512);
+	printf("Edge Color GPU: block dim = %d, thread dim = %d\n", blockSize.x, blockSize.y);
+
+	//// Host To Device: load buffers for Edge Coloring
+	//primList->MallocAndLoadToDevice();  // topolPrimList
+	//p2pIndices->MallocAndLoadToDevice();  // p2pIndices
+	//p2pStartNumList->MallocAndLoadToDevice();  // p2pStartNumList
+	//color->MallocAndLoadToDevice();  // color
+	//prdColor->MallocAndLoadToDevice();  // prdColor
+	//
+	//cudaMalloc((void **)&dFlag, sizeof(int));
+	//cudaError_t cudaStatus = cudaMemcpy(dFlag, &detectConflict, sizeof(int), cudaMemcpyHostToDevice);
+	//if(cudaStatus == cudaSuccess)  printf("\nMalloc and loads succeeded!\n");
+	// edge coloring SPMD
+	for (int i = 0; i < iterations; ++i)
+	{
+		AssignColorsGPU << < blockSize.x, blockSize.y >> > ((int2*)primList->GetDevicePtr(),
+			(int*)p2pIndices->GetDevicePtr(),
+			(int2*)p2pStartNumList->GetDevicePtr(),
+			(int*)color->GetDevicePtr(),
+			(int*)prdColor->GetDevicePtr(),
+			dFlag,
+			primNum);
+		ResolveConflictsGPU << < blockSize.x, blockSize.y >> > ((int2*)primList->GetDevicePtr(),
+			(int*)p2pIndices->GetDevicePtr(),
+			(int2*)p2pStartNumList->GetDevicePtr(),
+			(int*)color->GetDevicePtr(),
+			(int*)prdColor->GetDevicePtr(),
+			dFlag,
+			primNum);
+	}
+	// Device To Host: load buffers back
+	if (color->LoadToHost())
+		printf("Edge Color GPU: Load color Back Succeeded!\n");
+
+	/*printf("\nAfter iteration(color): ");
+	for (int i = 0; i < constrPBDBuffer.color.GetSize(); ++i)
+	{
+		printf("%d // ", constrPBDBuffer.color.m_Data[i]);
+	}
+	printf("\n");*/
+
+	// Free GPU memory
+	/*cudaFree(primList->GetDevicePtr());
+	cudaFree(p2pIndices->GetDevicePtr());
+	cudaFree(p2pStartNumList->GetDevicePtr());
+	cudaFree(color->GetDevicePtr());
+	cudaFree(prdColor->GetDevicePtr());
+	cudaFree(dFlag);*/
+}
+
+void PBDObject::SortEdgesColors()
+{
+	auto color = &(constrPBDBuffer.color);
+	auto sortedColor = &(constrPBDBuffer.sortedColor);
+	for (int i = 0; i < color->GetSize(); ++i)
+	{
+		printf("%d - ", color->m_Data[i]);
+	}
+	//sortedColor->m_Data = color->m_Data;
+	//constrPBDBuffer.sortedPrimID.m_Data = {}
+	//sort(sortedColor.m_Data.begin(), sortedColor.m_Data.end());
+
+	//change 
+	//constrPBDBuffer.sortedColor;
+	//constrPBDBuffer.sortedPrimID;
+}
+
+
+// ----------------------------------------------------------------------------------------
+// SolverPBD class
+
+// kernel functions for SolverPBD class
+void __global__ AdvectGPUKernel(
+	int pointNum,
+	float dt,
+	float dampingRate,
+	float3 gravity,
+	float3* velBuffer,
+	float3* prdPBuffer,
+	float3* positionBuffer)
+{
+	int pointId = blockIdx.x * blockDim.x + threadIdx.x;
+	// if(primId < 5) printf("\tResolveConflictsGPU-%d: prdColor %d\n", primId, prdColor[primId]);
+
+	if (pointId >= pointNum)
+		return;
+
+	/*if (i == 30)
+		printf("old velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
+	velBuffer[pointId] += gravity * dt;
+	/*if(i == 30)
+		printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
+	velBuffer[pointId] *= powf(dampingRate, dt);
+	prdPBuffer[pointId] = positionBuffer[pointId] + velBuffer[pointId] * dt;
+	//printf("postion Buffer: %f, %f, %f \n", prdPBuffer.m_Data[j].x, prdPBuffer.m_Data[j].y, prdPBuffer.m_Data[j].z);
+
+}
+
+void SolverPBD::Advect(float dt)
+{
+	switch (GPU)    // TODO: change back to ht
 	{
 	case CPU:
-	
-		for (int i = 0; i < velBuffer->GetSize(); i++)
-		{
-			/*if (i == 30)
-				printf("old velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
-			velBuffer->m_Data[i] += pbdObj->gravity * dt;
-			/*if(i == 30)
-				printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
-			velBuffer->m_Data[i] *= powf(pbdObj->dampingRate, dt);
-			
-		}
-
-		for (int j = 0; j < prdPBuffer->GetSize(); j++)
-		{
-			prdPBuffer->m_Data[j] = positionBuffer->m_Data[j] + velBuffer->m_Data[j] * dt;
-
-			//printf("postion Buffer: %f, %f, %f \n", prdPBuffer.m_Data[j].x, prdPBuffer.m_Data[j].y, prdPBuffer.m_Data[j].z);
-
-		}
+		AdvectCPU(dt);
 		break;
 	case GPU:
+		AdvectGPU(dt);
 		break;
 	default:
 		break;
 	}
 }
 
-void SolverPBD::ProjectConstraint(HardwareType ht, SolverType st, int iterations)
+void SolverPBD::AdvectCPU(float dt)
+{
+	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
+	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
+
+	for (int i = 0; i < velBuffer->GetSize(); i++)
+	{
+		/*if (i == 30)
+			printf("old velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
+		velBuffer->m_Data[i] += pbdObj->gravity * dt;
+		/*if(i == 30)
+			printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
+		velBuffer->m_Data[i] *= powf(pbdObj->dampingRate, dt);
+
+		prdPBuffer->m_Data[i] = positionBuffer->m_Data[i] + velBuffer->m_Data[i] * dt;
+
+		//printf("postion Buffer: %f, %f, %f \n", prdPBuffer.m_Data[j].x, prdPBuffer.m_Data[j].y, prdPBuffer.m_Data[j].z);
+
+	}
+}
+
+void SolverPBD::AdvectGPU(float dt)
+{
+	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
+	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
+
+	//printf("Before Advect GPU:");
+	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
+	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
+	//	prdPBuffer->m_Data[pbdObj->resY-1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
+	//	prdPBuffer->m_Data[pbdObj->resY - 1].z );
+
+	int pointNum = prdPBuffer->GetSize();
+	float dampingRate = pbdObj->dampingRate;
+	float3 gravity = pbdObj->gravity;
+
+	uint2 blockSize = positionBuffer->EvalBlockSize(512);
+	printf("Advect GPU: block dim = %d, thread dim = %d\n", blockSize.x, blockSize.y);
+	// Host To Device: load buffers for Advect
+
+	// edge coloring SPMD
+	AdvectGPUKernel << < blockSize.x, blockSize.y >> > (pointNum,
+		dt,
+		dampingRate,
+		gravity,
+		(float3*)velBuffer->GetDevicePtr(),
+		(float3*)prdPBuffer->GetDevicePtr(),
+		(float3*)positionBuffer->GetDevicePtr());
+	// Device To Host: load buffers back
+	//if (prdPBuffer->LoadToHost())
+	//	printf("Advect GPU: Load prdPBuffer Back Succeeded!\n");
+	//if (velBuffer->LoadToHost())
+	//	printf("Advect GPU: Load velBuffer Back Succeeded!\n");
+
+	//printf("After Advect GPU:");
+	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
+	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
+	//	prdPBuffer->m_Data[pbdObj->resY - 1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
+	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
+}
+
+void SolverPBD::ProjectConstraint(SolverType st, int iterations)
+{
+	switch (CPU)    // TODO: change back to ht
+	{
+	case CPU:
+		ProjectConstraintCPU(st, iterations);
+		break;
+	case GPU:
+		ProjectConstraintGPU(st, iterations);
+		break;
+	default:
+		break;
+	}
+}
+
+void SolverPBD::ProjectConstraintCPU(SolverType st, int iterations)
 {
 	auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
 	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
@@ -477,125 +784,193 @@ void SolverPBD::ProjectConstraint(HardwareType ht, SolverType st, int iterations
 	auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffness);
 	auto restPosBuffer = &(pbdObj->restPosBuffer);
 	auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
-	switch (ht)
+	//printf("Before Project Constraint CPU:");
+	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
+	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
+	//	prdPBuffer->m_Data[pbdObj->resY - 1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
+	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
+	for (size_t ii = 0; ii < iterations; ii++)
+	{
+		for (size_t i = 0; i < primList->GetSize(); i++)
+		{
+			if (primList->m_Data[i].y != 2)
+				continue;
+			int i0 = indices->m_Data[primList->m_Data[i].x];
+			int i1 = indices->m_Data[primList->m_Data[i].x + 1];
+			float3 dp1;
+			float3 dp2;
+			float d = Distance(prdPBuffer->m_Data[i0], prdPBuffer->m_Data[i1]);
+			float3 v;
+			v = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
+			dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
+			dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
+			dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
+			dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
+			dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
+			dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
+			float k = 1 - powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
+			dp1 *= k;
+			dp2 *= k;
+			prdPBuffer->m_Data[i0] += dp1;
+			prdPBuffer->m_Data[i1] += dp2;
+		}
+
+		for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
+		{
+			//attach points
+			if (j == 0)
+			{
+				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
+			}
+			if (j == pbdObj->resX - 1)
+			{
+				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
+			}
+
+			////point collide with sphere
+			//bool isCollideSphere = ColliderSphere(prdPBuffer.m_Data[j], sphereOrigin, sphereRadius, j);
+			//if (isCollideSphere) //move the point to the point which intersect with sphere
+			//{
+			//	float3 moveVector = GenerateMoveVectorSphere(sphereOrigin, sphereRadius, prdPBuffer.m_Data[j], j);
+			//	prdPBuffer.m_Data[j] += moveVector;
+			//}
+			////point collide with ground
+			//bool isCollideGoround = CollideGround(prdPBuffer.m_Data[j], groundCenter);
+			//if (isCollideGoround)
+			//{
+			//	prdPBuffer.m_Data[j].y = groundCenter.y;
+			//}
+		}
+	}
+	//printf("After Project Constraint CPU:");
+	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
+	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
+	//	prdPBuffer->m_Data[pbdObj->resY - 1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
+	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
+}
+
+void SolverPBD::ProjectConstraintGPU(SolverType st, int iterations)
+{
+	//pbdObj->SortEdgesColors();
+	//
+	//auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
+	//auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	//auto massBuffer = &(pbdObj->constrPBDBuffer.mass);
+	//auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restLength);
+	//auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffness);
+	//auto restPosBuffer = &(pbdObj->restPosBuffer);
+	//auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
+	//
+	//for (int i = 0; i < iterations; i++)
+	//{
+	//	// TODO: edge coloring
+	//	/*
+	//	int* color
+	//	int* sortedColor
+	//	int* sortedPrim
+	//	int main
+	//	{
+	//		sort(color, sortedColor, sortedPrim)
+	//		//color: 11220001110222
+	//		//sortedColor:000111222
+	//		//sortedPrim:
+	//		int2 workSets = Eval(SortedColor)
+	//		//workSets.x start
+	//		//workSets.y num
+	//		for(auto workset: workSets)
+	//		{
+	//			int start  = workSets.x
+	//			int num = workSets.y
+	//			kernel project<<<numBlock, numThread>>>(num, sortedPrim+start, prdPbuffer, restlength)
+	//			{
+	//				if(index > = num)
+	//					return;
+	//				int2 prim = sortedPrimId[index]
+	//				int i0 = primList[prim.x]
+	//				int i1 = primList[prim.x + 1]
+	//				float3 p0 = prdPbuffer[i0]
+	//				float3 p1 = prdPbuffer[i1]
+	//			}
+	//		}
+	//	}
+	//}
+}
+
+void SolverPBD::Integration(float dt)
+{
+	switch (GPU)    // TODO: change back to ht
 	{
 	case CPU:
-		for (size_t ii = 0; ii < iterations; ii++)
-		{
-			for (size_t i = 0; i < primList->GetSize(); i++)
-			{
-				if (primList->m_Data[i].y != 2)
-					continue;
-				int i0 = indices->m_Data[primList->m_Data[i].x];
-				int i1 = indices->m_Data[primList->m_Data[i].x + 1];
-				float3 dp1;
-				float3 dp2;
-				float d = Distance(prdPBuffer->m_Data[i0], prdPBuffer->m_Data[i1]);
-				float3 v;
-				v = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
-				dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
-				dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
-				dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
-				dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
-				dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
-				dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
-				float k = 1 - powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
-				dp1 *= k;
-				dp2 *= k;
-				prdPBuffer->m_Data[i0] += dp1;
-				prdPBuffer->m_Data[i1] += dp2;
-			}
-
-			for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
-			{
-				//attach points
-				if (j == 0)
-				{
-					prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
-				}
-				if ( j == pbdObj->resX - 1)
-				{
-					prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
-				}
-
-				////point collide with sphere
-				//bool isCollideSphere = ColliderSphere(prdPBuffer.m_Data[j], sphereOrigin, sphereRadius, j);
-				//if (isCollideSphere) //move the point to the point which intersect with sphere
-				//{
-				//	float3 moveVector = GenerateMoveVectorSphere(sphereOrigin, sphereRadius, prdPBuffer.m_Data[j], j);
-				//	prdPBuffer.m_Data[j] += moveVector;
-				//}
-				////point collide with ground
-				//bool isCollideGoround = CollideGround(prdPBuffer.m_Data[j], groundCenter);
-				//if (isCollideGoround)
-				//{
-				//	prdPBuffer.m_Data[j].y = groundCenter.y;
-				//}
-			}
-		}
+		IntegrationCPU(dt);
 		break;
 	case GPU:
-		for (int i = 0; i < iterations; i++)
-		{
-			// TODO: edge coloring
-			/*
-			int* color
-			int* sortedColor
-			int* sortedPrim
-
-			int main
-			{
-				sort(color, sortedColor, sortedPrim)
-				//color: 11220001110222
-				//sortedColor:000111222
-				//sortedPrim:
-				int2 workSets = Eval(SortedColor)
-				//workSets.x start
-				//workSets.y num
-				for(auto workset: workSets)
-				{
-					int start  = workSets.x
-					int num = workSets.y
-					kernel project<<<numBlock, numThread>>>(num, sortedPrim+start, prdPbuffer, restlength)
-					{
-						if(index > = num)
-							return;
-						int2 prim = sortedPrimId[index]
-						int i0 = primList[prim.x]
-						int i1 = primList[prim.x + 1]
-
-						float3 p0 = prdPbuffer[i0]
-						float3 p1 = prdPbuffer[i1]
-
-					}
-				}
-			}
-
-			*/
-		}
+		IntegrationGPU(dt);
 		break;
 	default:
 		break;
 	}
 }
 
-void SolverPBD::Integration(float dt, HardwareType ht)
+void SolverPBD::IntegrationCPU(float dt)
 {
 	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
 	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
-	auto prdPBuffer= &(pbdObj->constrPBDBuffer.prdPBuffer);
-	switch (ht)
+	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+
+	for (size_t i = 0; i < positionBuffer->GetSize(); i++)
 	{
-	case CPU:
-		for (size_t i = 0; i < positionBuffer->GetSize(); i++)
-		{
-			velBuffer->m_Data[i] = (prdPBuffer->m_Data[i] - positionBuffer->m_Data[i]) / dt;
-			positionBuffer->m_Data[i] = prdPBuffer->m_Data[i];
-		}
-		break;
-	case GPU:
-		break;
-	default:
-		break;
+		velBuffer->m_Data[i] = (prdPBuffer->m_Data[i] - positionBuffer->m_Data[i]) / dt;
+		positionBuffer->m_Data[i] = prdPBuffer->m_Data[i];
 	}
+}
+
+void __global__ IntegrationGPUKernel(
+	int pointNum,
+	float dt,
+	float3* velBuffer,
+	float3* prdPBuffer,
+	float3* positionBuffer)
+{
+	int pointId = blockIdx.x * blockDim.x + threadIdx.x;
+	// if(primId < 5) printf("\tResolveConflictsGPU-%d: prdColor %d\n", primId, prdColor[primId]);
+
+	if (pointId >= pointNum)
+		return;
+	velBuffer[pointId] = (prdPBuffer[pointId] - positionBuffer[pointId]) / dt;
+	positionBuffer[pointId] = prdPBuffer[pointId];
+}
+
+// TODO
+void SolverPBD::IntegrationGPU(float dt)
+{
+	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
+	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
+	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	/*printf("Before Integration GPU:");
+	printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
+		prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
+		prdPBuffer->m_Data[pbdObj->resY - 1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
+		prdPBuffer->m_Data[pbdObj->resY - 1].z);*/
+	int pointNum = prdPBuffer->GetSize();
+
+	uint2 blockSize = positionBuffer->EvalBlockSize(512);
+	printf("Integration GPU: block dim = %d, thread dim = %d\n", blockSize.x, blockSize.y);
+
+	IntegrationGPUKernel << < blockSize.x, blockSize.y >> > (pointNum,
+		dt,
+		(float3*)velBuffer->GetDevicePtr(),
+		(float3*)prdPBuffer->GetDevicePtr(),
+		(float3*)positionBuffer->GetDevicePtr());
+
+	// Device To Host: load buffers back
+	if (positionBuffer->LoadToHost())
+		printf("Integration GPU: Load positionBuffer Back Succeeded!\n");
+	if (velBuffer->LoadToHost())
+		printf("Integration GPU: Load velBuffer Back Succeeded!\n");
+
+	//printf("After Integration GPU:");
+	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
+	//	positionBuffer->m_Data[0].x, positionBuffer->m_Data[0].y, positionBuffer->m_Data[0].z,
+	//	positionBuffer->m_Data[pbdObj->resY - 1].x, positionBuffer->m_Data[pbdObj->resY - 1].y,
+	//	positionBuffer->m_Data[pbdObj->resY - 1].z);
 }

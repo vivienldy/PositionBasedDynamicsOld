@@ -8,11 +8,12 @@
 #include <string>
 #include <set>
 #include<assert.h>
+#include<algorithm>
 #include<vector_types.h>
 #include<vector_functions.h>
 #include "cuda_runtime.h"
 #include "helper_math.h"
-#include "device_launch_parameters.h"
+#include <device_launch_parameters.h>
 
 using namespace std;
 
@@ -69,18 +70,27 @@ template<class T>
 class Buffer
 {
 public:
+	Buffer() : m_BufferSize(0)
+	{
+		m_sName = "";
+		m_DevicePtr = nullptr;
+	}
+
 	typedef T ThisType;
-	void LoadToGPU();
-	void LoadToCPU();
 	vector<T> m_Data;
+
 	template<class S>
 	S* GetDevicePtr() { return  (S*)m_DevicePtr; }
+	void* GetDevicePtr() { return  m_DevicePtr; }
+
+	void** GetDevicePtrRaw() { return (void**)&m_DevicePtr; }
 
 	int GetSize() { return m_Data.size(); }
+	int GetCopySize() { return m_Data.size()*sizeof(T); }
 
 	int GetCapacity() { return m_Data.capacity(); }
 
-	uint2 EvalBlockSize(int nThread) { return make_uint2(ceil((float)m_Size / nThread), nThread); }
+	uint2 EvalBlockSize(int nThread) { return make_uint2(ceil((float)GetSize() / nThread), nThread); }
 
 	void Save(std::ofstream& os)
 	{
@@ -98,9 +108,90 @@ public:
 	{
 		m_sName = n;
 	}
+
+	inline bool LoadToHost()
+	{
+		if (!m_DevicePtr)
+		{
+			printf("[ %s ] Device Not Registered!\n", m_sName.c_str());
+			return false;
+		}
+		cudaError_t cudaStatus = cudaMemcpy(m_Data.data(), this->GetDevicePtr(), this->GetCopySize(), cudaMemcpyDeviceToHost);
+		if (cudaStatus != cudaSuccess)
+		{
+			printf("[ %s ]  cudaMemcpy failed\n", m_sName.c_str());
+			return false;
+		}
+		return true;
+	}
+
+	inline bool LoadToDevice(bool printSuccInfo = false)
+	{
+		if (!m_DevicePtr)
+		{
+			printf("[ %s ] Device Not Registered!\n", m_sName.c_str());
+			return false;
+		}
+		if (m_iDeviceBufferSize < m_Data.size())
+		{
+			cudaFree(m_DevicePtr);
+			m_DevicePtr = nullptr;
+			DeviceMalloc();
+		}
+		cudaError_t cudaStatus = cudaMemcpy(this->GetDevicePtr(), m_Data.data(), this->GetCopySize(), cudaMemcpyHostToDevice);
+		if (cudaStatus != cudaSuccess)
+		{
+			printf(" [%s] cudaMemcpy failed whit size [%d]\n", m_sName.c_str(), this->GetCopySize());
+			return false;
+		}
+
+		m_iDeviceBufferSize = m_Data.size();
+		if (printSuccInfo)
+			printf("Load [%s] To Device Succeeded\n", m_sName.c_str());
+		return true;
+	}
+
+	inline bool DeviceMalloc()
+	{
+		if (this->GetCopySize() == 0)
+		{
+			printf("[%s] Buffer Size = 0 !!! \n", m_sName.c_str());
+			return false;
+		}
+		if (m_DevicePtr != nullptr)
+		{
+			printf("[%s] DeviceRegistered!\n", m_sName.c_str());
+			return false;
+		}
+
+		cudaError_t cudaStatus = cudaMalloc(this->GetDevicePtrRaw(), this->GetCopySize());
+		if (cudaStatus != cudaSuccess)
+		{
+			printf("[%s] CudaMalloc Failed\n", m_sName.c_str());
+			return false;
+		}
+		else
+		{
+			printf("Malloc device memory succ use | %12.3f MB | [%3s ]\n",
+				(float)GetCopySize() / 1024.0f / 1024.0f, m_sName.c_str());
+		}
+		return true;
+	}
+
+	inline bool MallocAndLoadToDevice()
+	{
+		if (!this->m_DevicePtr)
+			this->DeviceMalloc();
+		if (!this->LoadToDevice())
+			return false;
+		return true;
+	}
+
 private:
 	std::string m_sName;
 	void* m_DevicePtr;
+	long int m_iDeviceBufferSize;
+	long int m_BufferSize;
 };
 
 typedef Buffer<int> BufferInt;
@@ -115,14 +206,14 @@ struct P2P
 	BufferInt2 startNumList;  // store start and number of neighbor points
 };
 
-struct Topology 
+struct Topology
 {
 	BufferInt indices;
 	BufferVector3f posBuffer;
 	BufferInt2 primList;
 };
 
-struct ConstraintPBD 
+struct ConstraintPBD
 {
 	Topology topol;
 	BufferFloat restLength;
@@ -134,11 +225,12 @@ struct ConstraintPBD
 	BufferInt constraintType;
 	// Util Maps
 	std::map<int, std::vector<int>> Point2PrimsMap;
-	P2P Prim2PrimsMap; 
+	P2P Prim2PrimsMap;
 
 	BufferInt color; // reserved for edge coloring
 	BufferInt prdColor; // reserved for edge coloring
 	BufferInt sortedColor;  // reserved for edge coloring
+	BufferInt sortedPrimID; 
 };
 
 
@@ -149,14 +241,14 @@ public:
 	{
 
 	}
-	PBDObject(float dampingRate, float3 gravity, int resX, int resY, float sizeX, float sizeY) :
-		dampingRate(dampingRate), gravity(gravity), resX(resX), resY(resY), sizeX(sizeX), sizeY(sizeY)
+	PBDObject(float dampingRate, float3 gravity, int resX, int resY, float sizeX, float sizeY, HardwareType ht) :
+		dampingRate(dampingRate), gravity(gravity), resX(resX), resY(resY), sizeX(sizeX), sizeY(sizeY), ht(ht)
 	{
 		Init();
 	}
 	~PBDObject()
 	{
-
+		freeGPUBuffers();
 	}
 	//static PBDObject* Create(std::string topologyPath, std::string constraintPath)
 	//{
@@ -168,19 +260,19 @@ public:
 	//}
 	void InitConstr(int numOfConstr, float unitMass, float* stiffnesses);
 
-	void groundTruthTest();
-
 	Topology meshTopol;  // opengl will draw this topol
 	ConstraintPBD constrPBDBuffer;
 	BufferVector3f restPosBuffer;
 	float dampingRate;
 	float3 gravity;
+	HardwareType ht;
 	int resX, resY;
 	float sizeX, sizeY;
-	
-	
-private:
+
 	int detectConflict;
+	int* dFlag; // detectConflicts used for GPU allocation 
+
+private:
 	void Init();
 	void CreatePosition(BufferVector3f& positionBuffer, float2 cord, float sizeX, float sizeY, int resY, int resX);
 	void CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX);
@@ -195,11 +287,18 @@ private:
 	void AssignColorsCPU();
 	void ResolveConflictsCPU();
 	void EdgeColoring(int iterations);
+	void EdgeColoringCPU(int iterations);
+	void EdgeColoringGPU(int iterations);
 	void SortEdgesColors();
+
+	void groundTruthTest();
+
+	void initGPUBuffers();
+	void freeGPUBuffers();
 
 };
 
-class SolverPBD 
+class SolverPBD
 {
 public:
 	SolverPBD()
@@ -210,13 +309,24 @@ public:
 	{
 
 	}
-	void SetTarget(PBDObject* pbdObj) { this->pbdObj = pbdObj; }
-	void Advect(float dt, HardwareType ht);
-	void ProjectConstraint(HardwareType ht, SolverType st, int iterations);
-	void Integration(float dt, HardwareType ht);
+	void SetTarget(PBDObject* pbdObj) 
+	{ 
+		this->pbdObj = pbdObj; 
+		this->ht = pbdObj->ht;
+	}
+	void Advect(float dt);
+	void ProjectConstraint(SolverType st, int iterations);
+	void Integration(float dt);
 
 private:
 	PBDObject* pbdObj;
+	HardwareType ht;
+	void AdvectCPU(float dt);
+	void AdvectGPU(float dt);
+	void ProjectConstraintCPU(SolverType st, int iterations);
+	void ProjectConstraintGPU(SolverType st, int iterations);
+	void IntegrationCPU(float dt);
+	void IntegrationGPU(float dt);
 };
 
 namespace IO
@@ -297,4 +407,3 @@ namespace IO
 //}
 
 #endif
-
