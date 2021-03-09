@@ -75,9 +75,9 @@ int main()
 	float sizeY = 5.0f;
 	float3 gravity = make_float3(0.0, -10.0, 0.0);
 	int startFrame = 1;
-	int endFrame = 10;
-	int substep = 1;
-	int iteration = 1;
+	int endFrame = 20;
+	int substep = 4;
+	int iteration = 10;
 	HardwareType ht = GPU;
 	SolverType st = GAUSSSEIDEL;
 
@@ -96,8 +96,9 @@ int main()
 	 int fps = 24;
 	 float dt = 1.0 / fps / (float)substep;
 	 ////int frame = 0
-	 solver.Advect(dt);
-	 WritePointsToFile(pbdObj.constrPBDBuffer.prdPBuffer, 0);
+	 //solver.Advect(dt);
+	 //solver.ProjectConstraint(GAUSSSEIDEL, iteration);
+	 //WritePointsToFile(pbdObj.constrPBDBuffer.prdPBuffer, 0);
 
 	 for (size_t i = startFrame; i < endFrame; i++)
 	 {

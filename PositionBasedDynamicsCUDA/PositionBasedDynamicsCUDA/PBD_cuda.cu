@@ -1,6 +1,6 @@
 #include "PBD_Basic.cuh"
 
-float Distance(float3 p1, float3 p2)
+KERNEL_FUNC float Distance(float3 p1, float3 p2)
 {
 	return powf(powf((p1.x - p2.x), 2) + powf((p1.y - p2.y), 2) + powf((p1.z - p2.z), 2), 0.5);
 }
@@ -30,65 +30,94 @@ void PBDObject::Init()
 	float stiffnessBuff[1] = { 1.0f };
 	// groundTruthTest();
 	InitConstr(1, 1.0f, stiffnessBuff);
-	if (this->ht == GPU)
-		initGPUBuffers();
+
 }
 
 void PBDObject::initGPUBuffers()
 {
 	printf("init GPU buffers\n");
-	auto primList = &(constrPBDBuffer.topol.primList);
-	auto p2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
-	auto p2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
-	auto color = &(constrPBDBuffer.color);
-	auto prdColor = &(constrPBDBuffer.prdColor);
+	auto dPrimList = &(constrPBDBuffer.topol.primList);
+	auto dP2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
+	auto dP2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
+	auto dColor = &(constrPBDBuffer.color);
+	auto dPrdColor = &(constrPBDBuffer.prdColor);
 
-	auto velBuffer = &(constrPBDBuffer.velBuffer);
-	auto prdPBuffer = &(constrPBDBuffer.prdPBuffer);
-	auto positionBuffer = &(meshTopol.posBuffer);
+	auto dVelBuffer = &(constrPBDBuffer.velBuffer);
+	auto dPrdPBuffer = &(constrPBDBuffer.prdPBuffer);
+	auto dPositionBuffer = &(meshTopol.posBuffer);
+
+	auto dMassBuffer = &(constrPBDBuffer.mass);
+	auto dRestLengthBuffer = &(constrPBDBuffer.restReference);
+	auto dStiffnessBuffer = &(constrPBDBuffer.stiffness);
+	auto dRestPosBuffer = &(restPosBuffer);
+	auto dIndices = &(constrPBDBuffer.topol.indices);
 
 	// Host To Device: load buffers for Edge Coloring
 	cudaMalloc((void**)&dFlag, sizeof(int));
 	cudaError_t cudaStatus = cudaMemcpy(dFlag, &detectConflict, sizeof(int), cudaMemcpyHostToDevice);
 	if (cudaStatus == cudaSuccess)  printf("\nMalloc and loads succeeded!\n");
 
-	primList->MallocAndLoadToDevice();  // topolPrimList
-	p2pIndices->MallocAndLoadToDevice();  // p2pIndices
-	p2pStartNumList->MallocAndLoadToDevice();  // p2pStartNumList
-	color->MallocAndLoadToDevice();  // color
-	prdColor->MallocAndLoadToDevice();  // prdColor
+	dPrimList->MallocAndLoadToDevice();  // topolPrimList
+	dP2pIndices->MallocAndLoadToDevice();  // p2pIndices
+	dP2pStartNumList->MallocAndLoadToDevice();  // p2pStartNumList
+	dColor->MallocAndLoadToDevice();  // color
+	dPrdColor->MallocAndLoadToDevice();  // prdColor
 
-	velBuffer->MallocAndLoadToDevice(); // velocity Buffer
-	prdPBuffer->MallocAndLoadToDevice();  // predicted position buffer
-	positionBuffer->MallocAndLoadToDevice();  // point real position buffer
+
+	dVelBuffer->MallocAndLoadToDevice(); // velocity Buffer
+	dPrdPBuffer->MallocAndLoadToDevice();  // predicted position buffer
+	dPositionBuffer->MallocAndLoadToDevice();  // point real position buffer
+
+	dMassBuffer->MallocAndLoadToDevice();
+	dRestLengthBuffer->MallocAndLoadToDevice();
+	dStiffnessBuffer->MallocAndLoadToDevice();
+	dRestPosBuffer->MallocAndLoadToDevice();
+	dIndices->MallocAndLoadToDevice();
 }
 
 void PBDObject::freeGPUBuffers()
 {
-	auto primList = &(constrPBDBuffer.topol.primList);
-	auto p2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
-	auto p2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
-	auto color = &(constrPBDBuffer.color);
-	auto prdColor = &(constrPBDBuffer.prdColor);
+	auto dPrimList = &(constrPBDBuffer.topol.primList);
+	auto dP2pIndices = &(constrPBDBuffer.Prim2PrimsMap.indices);
+	auto dP2pStartNumList = &(constrPBDBuffer.Prim2PrimsMap.startNumList);
+	auto dColor = &(constrPBDBuffer.color);
+	auto dPrdColor = &(constrPBDBuffer.prdColor);
+	auto dSortedColor = &(constrPBDBuffer.sortedColor);
+	auto dSortedPrimId = &(constrPBDBuffer.sortedPrimId);
 
-	auto velBuffer = &(constrPBDBuffer.velBuffer);
-	auto prdPBuffer = &(constrPBDBuffer.prdPBuffer);
-	auto positionBuffer = &(meshTopol.posBuffer);
+	auto dVelBuffer = &(constrPBDBuffer.velBuffer);
+	auto dPrdPBuffer = &(constrPBDBuffer.prdPBuffer);
+	auto dPositionBuffer = &(meshTopol.posBuffer);
+
+	auto dMassBuffer = &(constrPBDBuffer.mass);
+	auto dRestLengthBuffer = &(constrPBDBuffer.restReference);
+	auto dStiffnessBuffer = &(constrPBDBuffer.stiffness);
+	auto dRestPosBuffer = &(restPosBuffer);
+	auto dIndices = &(constrPBDBuffer.topol.indices);
 
 	cudaFree(dFlag);
 
-	cudaFree(primList->GetDevicePtr());
-	cudaFree(p2pIndices->GetDevicePtr());
-	cudaFree(p2pStartNumList->GetDevicePtr());
-	cudaFree(color->GetDevicePtr());
-	cudaFree(prdColor->GetDevicePtr());
+	cudaFree(dPrimList->GetDevicePtr());
+	cudaFree(dP2pIndices->GetDevicePtr());
+	cudaFree(dP2pStartNumList->GetDevicePtr());
+	cudaFree(dColor->GetDevicePtr());
+	cudaFree(dPrdColor->GetDevicePtr());
+	cudaFree(dSortedColor->GetDevicePtr());
+	cudaFree(dSortedPrimId->GetDevicePtr());
 
-	cudaFree(velBuffer->GetDevicePtr());
-	cudaFree(prdPBuffer->GetDevicePtr());
-	cudaFree(positionBuffer->GetDevicePtr());
+	cudaFree(dVelBuffer->GetDevicePtr());
+	cudaFree(dPrdPBuffer->GetDevicePtr());
+	cudaFree(dPositionBuffer->GetDevicePtr());
+
+	cudaFree(dMassBuffer->GetDevicePtr());
+	cudaFree(dRestLengthBuffer->GetDevicePtr());
+	cudaFree(dStiffnessBuffer->GetDevicePtr());
+	cudaFree(dRestPosBuffer->GetDevicePtr());
+	cudaFree(dIndices->GetDevicePtr());
 }
 
-
+// init : allocation
+// setvalue
 void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnesses)
 {
 	constrPBDBuffer.topol.posBuffer = meshTopol.posBuffer;
@@ -104,6 +133,17 @@ void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnes
 		printf("postion Buffer: %f, %f, %f \n", constrPBDBuffer.topol.posBuffer.m_Data[i].x, constrPBDBuffer.topol.posBuffer.m_Data[i].y, constrPBDBuffer.topol.posBuffer.m_Data[i].z);
 	}*/
 
+
+	/*
+	for (auto edge : edge2primMap)
+	{
+		//edge2primMap numEdge*2
+		// 流形拓扑
+		// edge 2 prim
+		// int2 List;
+	}
+	*/
+
 	std::set<unsigned long>::iterator it;
 	// assert(numOfConstr == stiffnesses.size());
 	for (int i = 0; i < constrNumSetting; ++i)
@@ -112,7 +152,7 @@ void PBDObject::InitConstr(int constrNumSetting, float unitMass, float* stiffnes
 		{
 		case DISTANCE:
 			CreateDistanceIndices(constrPBDBuffer.topol.indices, resY, resX);
-			CreateSingleDistConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, stiffnesses[DISTANCE], unitMass);
+			CreateDistanceConstr(constrPBDBuffer.topol.posBuffer, constrPBDBuffer.topol.primList, constrPBDBuffer.topol.indices, constrPBDBuffer.sortedPrimId, stiffnesses[DISTANCE], unitMass);
 			GenePoint2PrimsMap(constrPBDBuffer.topol);
 			GenePrim2PrimsMap(constrPBDBuffer.topol);
 			if (ht == GPU)
@@ -165,26 +205,32 @@ void PBDObject::CreateDistanceIndices(BufferInt& indices, int resY, int resX)
 	}
 }
 
-void PBDObject::CreateSingleDistConstr(BufferVector3f& positionBuffer, BufferInt2& primList, BufferInt& indices, float stiffness, float unitMass)
+void PBDObject::CreateDistanceConstr(BufferVector3f& positionBuffer, BufferInt2& primList, BufferInt& indices, BufferInt& sortedPrimID, float stiffness, float unitMass)
 {
+	//
+	// constraint allocation 
+	//	质点+弹簧系统
+	// 
 	int count = 2;
-	for (int i = 0; i < indices.GetSize() / count; i++)
+	int prims = indices.GetSize() / count;
+	for (int i = 0; i < prims; i++)
 	{
-		// init primList
+		// init primList & sortedPrimID 
 		int2 p;
 		p.x = i * count;
 		p.y = count;
 		primList.m_Data.push_back(p);
+		sortedPrimID.m_Data.push_back(i); // WARNING: sortedPrimID JUST for now (without collision)
 		// init stiffness
 		constrPBDBuffer.stiffness.m_Data.push_back(stiffness);
 		// init rest length
 		int i0 = indices.m_Data[p.x];
 		int i1 = indices.m_Data[p.x + 1];
 		float d = Distance(positionBuffer.m_Data[i0], positionBuffer.m_Data[i1]);
-		constrPBDBuffer.restLength.m_Data.push_back(d);
-		// init mass
-		constrPBDBuffer.mass.m_Data.push_back(unitMass);
-		constrPBDBuffer.mass.m_Data.push_back(unitMass);
+		constrPBDBuffer.restReference.m_Data.push_back(d);
+		//// init mass
+		//constrPBDBuffer.mass.m_Data.push_back(unitMass);
+		//constrPBDBuffer.mass.m_Data.push_back(unitMass);
 		// init contraint type
 		constrPBDBuffer.constraintType.m_Data.push_back(DISTANCE);
 		// init color
@@ -192,7 +238,34 @@ void PBDObject::CreateSingleDistConstr(BufferVector3f& positionBuffer, BufferInt
 		constrPBDBuffer.prdColor.m_Data.push_back(-1);
 		constrPBDBuffer.sortedColor.m_Data.push_back(-1);
 	}
+
+	/*
+	for (int a = 0; a < 2; a++)
+	{
+		int2 p;
+		p.x = indices.GetSize();
+		p.y = 1;
+
+		constrPBDBuffer.color.m_Data.push_back(-1);
+		constrPBDBuffer.prdColor.m_Data.push_back(-1);
+		constrPBDBuffer.sortedColor.m_Data.push_back(-1);
+		constrPBDBuffer.constraintType.m_Data.push_back(ANCHOR);
+		constrPBDBuffer.stiffness.m_Data.push_back(1.0);
+
+		indices.m_Data.push_back(a == 0 ? 0 : resY - 1);
+		primList.m_Data.push_back(p);
+		sortedPrimID.m_Data.push_back(prims);
+
+		std::cout << "primList:" << primList.GetSize() << std::endl;
+		std::cout << "indices:" << indices.m_Data[indices.GetSize()] << std::endl;
+	}
+	*/
+
+
+	
+
 }
+
 
 void PBDObject::CreatePosition(BufferVector3f& positionBuffer, float2 cord, float sizeX, float sizeY, int resY, int resX)
 {
@@ -214,6 +287,19 @@ void PBDObject::CreatePosition(BufferVector3f& positionBuffer, float2 cord, floa
 	}
 	restPosBuffer.m_Data.push_back(positionBuffer.m_Data[0]);
 	restPosBuffer.m_Data.push_back(positionBuffer.m_Data[resX - 1]);
+	// init mass
+	for (int i = 0; i < num; i++)
+	{
+		//constrPBDBuffer.mass.m_Data.push_back(1.0);
+		if (i == 0 || i == resY - 1)
+		{
+			constrPBDBuffer.mass.m_Data.push_back(0.0);
+		}
+		else
+		{
+			constrPBDBuffer.mass.m_Data.push_back(1.0);
+		}
+	}
 }
 
 void PBDObject::CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX)
@@ -638,17 +724,78 @@ void PBDObject::SortEdgesColors()
 {
 	auto color = &(constrPBDBuffer.color);
 	auto sortedColor = &(constrPBDBuffer.sortedColor);
+	auto sortedPrimID = &(constrPBDBuffer.sortedPrimId);
+
+	sortedColor->m_Data = color->m_Data;
+	/*for (int i = 0; i < color->GetSize(); ++i)
+	{
+		printf("%d - ", color->m_Data[i]);
+	}
+	printf("\n");
+	for (int i = 0; i < sortedPrimID->GetSize(); ++i)
+	{
+		printf("%d - ", sortedPrimID->m_Data[i]);
+	}
+	printf("\n");*/
+	thrust::sort_by_key(sortedColor->m_Data.begin(), sortedColor->m_Data.end(), constrPBDBuffer.sortedPrimId.m_Data.begin());
+	auto dSortedColor = &(constrPBDBuffer.sortedColor);
+	auto dSortedPrimId = &(constrPBDBuffer.sortedPrimId);
+	dSortedColor->MallocAndLoadToDevice();
+	dSortedPrimId->MallocAndLoadToDevice();
+	/*for (int i = 0; i < sortedColor->GetSize(); ++i)
+	{
+		printf("%d - ", sortedColor->m_Data[i]);
+	}
+	printf("\n");
+	for (int i = 0; i < color->GetSize(); ++i)
+	{
+		printf("%d - ", sortedPrimID->m_Data[i]);
+	}
+	printf("\n");
 	for (int i = 0; i < color->GetSize(); ++i)
 	{
 		printf("%d - ", color->m_Data[i]);
 	}
-	//sortedColor->m_Data = color->m_Data;
-	//constrPBDBuffer.sortedPrimID.m_Data = {}
-	//sort(sortedColor.m_Data.begin(), sortedColor.m_Data.end());
+	printf("\n");*/
+}
 
-	//change 
-	//constrPBDBuffer.sortedColor;
-	//constrPBDBuffer.sortedPrimID;
+void PBDObject::EvalWorksets()
+{
+	auto sortedColor = &(constrPBDBuffer.sortedColor);
+	//sortedColor->m_Data = {4,0,0,0,0,1,1,1,1,2,2};
+	auto worksets = &(constrPBDBuffer.colorWorksets);
+	int count = 1;
+	for (int i = 1 ; i < sortedColor->GetSize(); ++i)
+	{
+		if(i == sortedColor->GetSize() - 1 && sortedColor->m_Data[i] == sortedColor->m_Data[i - 1])
+		{
+			count++;
+			worksets->m_Data.push_back(make_int2(i - count  + 1, count));
+		}
+		else if(i == sortedColor->GetSize() - 1 && sortedColor->m_Data[i] != sortedColor->m_Data[i - 1])
+		{
+			worksets->m_Data.push_back(make_int2(i-count, count));
+			worksets->m_Data.push_back(make_int2(i, 1));
+		}
+		else if (i != sortedColor->GetSize() - 1 && sortedColor->m_Data[i] != sortedColor->m_Data[i - 1])
+		{
+			worksets->m_Data.push_back(make_int2(i - count, count));
+			count = 1;
+		}
+		else
+		{
+			count++;
+		}
+	}
+	/*for (int i = 0; i < sortedColor->GetSize(); ++i)
+	{
+		printf("%d - ", sortedColor->m_Data[i]);
+	}
+	printf("\n");
+	for (int i = 0; i < worksets->GetSize(); ++i)
+	{
+		printf("start: %d, num: %d \n", worksets->m_Data[i].x, worksets->m_Data[i].y);
+	}*/
 }
 
 
@@ -661,6 +808,7 @@ void __global__ AdvectGPUKernel(
 	float dt,
 	float dampingRate,
 	float3 gravity,
+	float* mass,
 	float3* velBuffer,
 	float3* prdPBuffer,
 	float3* positionBuffer)
@@ -673,7 +821,7 @@ void __global__ AdvectGPUKernel(
 
 	/*if (i == 30)
 		printf("old velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
-	velBuffer[pointId] += gravity * dt;
+	velBuffer[pointId] += gravity * dt * mass[pointId];
 	/*if(i == 30)
 		printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
 	velBuffer[pointId] *= powf(dampingRate, dt);
@@ -724,6 +872,7 @@ void SolverPBD::AdvectGPU(float dt)
 	auto velBuffer = &(pbdObj->constrPBDBuffer.velBuffer);
 	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
 	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
+	auto massBuffer = &(pbdObj->constrPBDBuffer.mass);
 
 	//printf("Before Advect GPU:");
 	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
@@ -736,7 +885,7 @@ void SolverPBD::AdvectGPU(float dt)
 	float3 gravity = pbdObj->gravity;
 
 	uint2 blockSize = positionBuffer->EvalBlockSize(512);
-	printf("Advect GPU: block dim = %d, thread dim = %d\n", blockSize.x, blockSize.y);
+	//printf("Advect GPU: block dim = %d, thread dim = %d\n", blockSize.x, blockSize.y);
 	// Host To Device: load buffers for Advect
 
 	// edge coloring SPMD
@@ -744,6 +893,7 @@ void SolverPBD::AdvectGPU(float dt)
 		dt,
 		dampingRate,
 		gravity,
+		(float*)massBuffer->GetDevicePtr(),
 		(float3*)velBuffer->GetDevicePtr(),
 		(float3*)prdPBuffer->GetDevicePtr(),
 		(float3*)positionBuffer->GetDevicePtr());
@@ -762,7 +912,7 @@ void SolverPBD::AdvectGPU(float dt)
 
 void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 {
-	switch (CPU)    // TODO: change back to ht
+	switch (GPU)    // TODO: change back to ht
 	{
 	case CPU:
 		ProjectConstraintCPU(st, iterations);
@@ -780,7 +930,7 @@ void SolverPBD::ProjectConstraintCPU(SolverType st, int iterations)
 	auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
 	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
 	auto massBuffer = &(pbdObj->constrPBDBuffer.mass);
-	auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restLength);
+	auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restReference);
 	auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffness);
 	auto restPosBuffer = &(pbdObj->restPosBuffer);
 	auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
@@ -822,7 +972,7 @@ void SolverPBD::ProjectConstraintCPU(SolverType st, int iterations)
 			{
 				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
 			}
-			if (j == pbdObj->resX - 1)
+			if (j == pbdObj->resY - 1)
 			{
 				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
 			}
@@ -849,19 +999,114 @@ void SolverPBD::ProjectConstraintCPU(SolverType st, int iterations)
 	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
 }
 
+void __global__ ProjectContraintsGPUKernel(
+	int resY,
+	int start,
+	int num,
+	int iteration,
+	int* sortedPrimId,
+	int* indices,
+	float* massBuffer,
+	float* restLengthBuffer,
+	float* stiffnessBuffer,
+	int2* primList,
+	float3* prdPBuffer,
+	float3* restBuffer)
+{
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	if (idx >= num)
+		return;
+	//printf("idx: %d ---- ", idx + start);
+	auto primId = sortedPrimId[idx + start];
+	//printf("idx + start: %d, primId: %d \n", idx + start, primId);
+	if (primList[primId].y == 2)
+	{
+		
+		int i0 = indices[primList[primId].x];
+		int i1 = indices[primList[primId].x + 1];
+
+		float3 p0 = prdPBuffer[i0];
+		float3 p1 = prdPBuffer[i1];
+
+		//if (i0 == 0 || i1 == 0)
+		//{
+		//	float3 pt0 = prdPBuffer[0];
+		//	printf("vec:[%f,%f,%f] \n", pt0.x, pt0.y, pt0.z);
+		//}
+
+
+		float3 dp0;
+		float3 dp1;
+		float d = Distance(p0, p1);
+		float3 v;
+		v = p0 - p1;
+		dp0 = -massBuffer[i0] / (massBuffer[i0] + massBuffer[i1]) * (d - restLengthBuffer[primId]) * v / d;
+		dp1 = massBuffer[i1] / (massBuffer[i0] + massBuffer[i1]) * (d - restLengthBuffer[primId]) * v / d;
+		float k = 1 - powf(1 - stiffnessBuffer[primId], 1.0 / (iteration + 1));
+		dp0 *= k;
+		dp1 *= k;
+		
+		//if(i0 !=0  || i0 != resY - 1)
+		prdPBuffer[i0] += dp0;
+		//if(i1 != 0  || i1 != resY-1)
+		prdPBuffer[i1] += dp1;
+		//prdPBuffer[0] = restBuffer[0];
+		//prdPBuffer[resY - 1] = restBuffer[1];
+	}
+}
+
 void SolverPBD::ProjectConstraintGPU(SolverType st, int iterations)
 {
-	//pbdObj->SortEdgesColors();
-	//
-	//auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
-	//auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
-	//auto massBuffer = &(pbdObj->constrPBDBuffer.mass);
-	//auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restLength);
-	//auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffness);
-	//auto restPosBuffer = &(pbdObj->restPosBuffer);
-	//auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
-	//
-	//for (int i = 0; i < iterations; i++)
+	pbdObj->SortEdgesColors();
+	pbdObj->EvalWorksets();
+
+	auto worksets = &(pbdObj->constrPBDBuffer.colorWorksets);	
+	auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
+	auto sortedPrimId = &(pbdObj->constrPBDBuffer.sortedPrimId);
+	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	auto massBuffer = &(pbdObj->constrPBDBuffer.mass);
+	auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restReference);
+	auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffness);
+	auto restPosBuffer = &(pbdObj->restPosBuffer);
+	auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
+
+	// std::cout << __FUNCTION__<< worksets->m_Data.size() << std::endl;
+
+	for (int i = 0; i < iterations; ++i)
+	{
+		for (auto workset : worksets->m_Data)
+		{
+			int start = workset.x;
+			int num = workset.y;
+			int numBlock = 1;
+			int numThread = 512;
+			if (num > numThread && num < 1024)
+				numThread = num;
+			else if (num > 1024)
+				numBlock = ceil(num / 512);
+			//printf("----------------------------\n");
+			//printf("		numBlock: %d numThread: %d\n", numBlock, numThread);
+			ProjectContraintsGPUKernel << <numBlock, numThread >> > (pbdObj->resY,
+				start,
+				num,
+				i,
+				((int*)sortedPrimId->GetDevicePtr()),
+				(int*)indices->GetDevicePtr(),
+				(float*)massBuffer->GetDevicePtr(),
+				(float*)restLengthBuffer->GetDevicePtr(),
+				(float*)stiffnessBuffer->GetDevicePtr(),
+				(int2*)primList->GetDevicePtr(),
+				(float3*)prdPBuffer->GetDevicePtr(),
+				(float3*)restPosBuffer->GetDevicePtr());
+			/*cudaError_t cudaStatus = cudaGetLastError();
+			if (cudaStatus != cudaSuccess)
+			{
+				fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+			}*/
+		}
+	}
+	
 	//{
 	//	// TODO: edge coloring
 	//	/*
@@ -931,6 +1176,7 @@ void __global__ IntegrationGPUKernel(
 	float3* prdPBuffer,
 	float3* positionBuffer)
 {
+
 	int pointId = blockIdx.x * blockDim.x + threadIdx.x;
 	// if(primId < 5) printf("\tResolveConflictsGPU-%d: prdColor %d\n", primId, prdColor[primId]);
 

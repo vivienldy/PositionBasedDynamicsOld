@@ -13,6 +13,7 @@
 #include<vector_functions.h>
 #include "cuda_runtime.h"
 #include "helper_math.h"
+#include"thrust/sort.h"
 #include <device_launch_parameters.h>
 
 using namespace std;
@@ -86,7 +87,7 @@ public:
 	void** GetDevicePtrRaw() { return (void**)&m_DevicePtr; }
 
 	int GetSize() { return m_Data.size(); }
-	int GetCopySize() { return m_Data.size()*sizeof(T); }
+	int GetCopySize() { return m_Data.size() * sizeof(T); }
 
 	int GetCapacity() { return m_Data.capacity(); }
 
@@ -216,7 +217,7 @@ struct Topology
 struct ConstraintPBD
 {
 	Topology topol;
-	BufferFloat restLength;
+	BufferFloat restReference;  // determine the rest pos structure of constrs
 	BufferVector3f prdPBuffer;
 	BufferVector3f velBuffer;
 	BufferFloat mass;
@@ -226,11 +227,12 @@ struct ConstraintPBD
 	// Util Maps
 	std::map<int, std::vector<int>> Point2PrimsMap;
 	P2P Prim2PrimsMap;
-
+	// edge coloring
 	BufferInt color; // reserved for edge coloring
 	BufferInt prdColor; // reserved for edge coloring
 	BufferInt sortedColor;  // reserved for edge coloring
-	BufferInt sortedPrimID; 
+	BufferInt sortedPrimId; // reserved for edge coloring
+	BufferInt2 colorWorksets;
 };
 
 
@@ -259,6 +261,8 @@ public:
 	//	return ret;
 	//}
 	void InitConstr(int numOfConstr, float unitMass, float* stiffnesses);
+	void SortEdgesColors();
+	void EvalWorksets();
 
 	Topology meshTopol;  // opengl will draw this topol
 	ConstraintPBD constrPBDBuffer;
@@ -277,7 +281,7 @@ private:
 	void CreatePosition(BufferVector3f& positionBuffer, float2 cord, float sizeX, float sizeY, int resY, int resX);
 	void CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX);
 	void CreateDistanceIndices(BufferInt& indices, int resY, int resX);
-	void CreateSingleDistConstr(BufferVector3f& positionBuffer, BufferInt2& primList, BufferInt& indices, float stiffness, float unitMass);
+	void CreateDistanceConstr(BufferVector3f& positionBuffer, BufferInt2& primList, BufferInt& indices, BufferInt& sortedPrimID, float stiffness, float unitMass);
 
 	// init two maps for edge coloring
 	void GenePoint2PrimsMap(Topology topol);
@@ -289,7 +293,6 @@ private:
 	void EdgeColoring(int iterations);
 	void EdgeColoringCPU(int iterations);
 	void EdgeColoringGPU(int iterations);
-	void SortEdgesColors();
 
 	void groundTruthTest();
 
@@ -309,9 +312,9 @@ public:
 	{
 
 	}
-	void SetTarget(PBDObject* pbdObj) 
-	{ 
-		this->pbdObj = pbdObj; 
+	void SetTarget(PBDObject* pbdObj)
+	{
+		this->pbdObj = pbdObj;
 		this->ht = pbdObj->ht;
 	}
 	void Advect(float dt);
