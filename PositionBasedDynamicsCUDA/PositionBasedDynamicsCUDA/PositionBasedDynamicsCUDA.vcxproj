@@ -85,6 +85,7 @@
     <CudaCompile Include="PBD_cuda_impl.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\glad\src\glad.c" />
     <ClCompile Include="PositionBasedDynamics.cpp" />
   </ItemGroup>
   <ItemGroup>

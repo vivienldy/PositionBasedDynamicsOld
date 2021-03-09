@@ -1,8 +1,14 @@
+#include <glad/glad.h> 
+#include <GLFW/glfw3.h>
+#include<shader/shader_m.h>
 #include<vector>
 #include <string>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include "cuda_runtime.h"
 # include <thrust/host_vector.h>
-#include <chrono>
+
 #include"PBD_Basic.cuh"
 
 using namespace std;
@@ -62,27 +68,20 @@ for(auto workset: workSets)
 
 int main()
 {
-	auto start = chrono::steady_clock::now(); 
-	clock_t tStart = clock();
-
-	int resY = 512;
-	int resX = 512;
+	int resY = 16;
+	int resX = 16;
 	float dampingRate = 0.9f;
-	float sizeX = 10.0f;
-	float sizeY = 10.0f;
+	float sizeX = 5.0f;
+	float sizeY = 5.0f;
 	float3 gravity = make_float3(0.0, -10.0, 0.0);
 	int startFrame = 1;
 	int endFrame = 20;
 	int substep = 4;
 	int iteration = 10;
-	HardwareType ht = CPU;
+	HardwareType ht = GPU;
 	SolverType st = GAUSSSEIDEL;
-	float stiffnessSetting[1] = {1.0f};
 
 	PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY, ht);
-	pbdObj.setConstrOption(DISTANCE | ANCHOR, stiffnessSetting);
-	pbdObj.Init();
-
 	SolverPBD solver;
 	solver.SetTarget(&pbdObj);	
 
@@ -109,13 +108,8 @@ int main()
 			 solver.ProjectConstraint(st, iteration);
 			 solver.Integration(dt);
 		 }
-		 // WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
+		 WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
 	 }
-
-	 auto end = chrono::steady_clock::now();
-	 auto diff = end - start;
-	 cout << chrono::duration <double, milli>(diff).count() << " ms" << endl;
-
 }
 /*
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);

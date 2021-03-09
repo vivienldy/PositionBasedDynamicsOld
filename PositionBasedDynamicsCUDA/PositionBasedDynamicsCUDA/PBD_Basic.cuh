@@ -26,11 +26,11 @@ using namespace std;
 
 enum ConstraintType
 {
-	DISTANCE = 0x001,
-	BENDING = 0x010,
-	ANCHOR = 0x100
+	DISTANCE,
+	BENDING,
+	ANCHOR,
+	NUMCONSTR
 };
-
 
 enum SolverType
 {
@@ -112,7 +112,6 @@ public:
 
 	inline bool LoadToHost()
 	{
-		
 		if (!m_DevicePtr)
 		{
 			printf("[ %s ] Device Not Registered!\n", m_sName.c_str());
@@ -172,11 +171,11 @@ public:
 			printf("[%s] CudaMalloc Failed\n", m_sName.c_str());
 			return false;
 		}
-		/*else
+		else
 		{
 			printf("Malloc device memory succ use | %12.3f MB | [%3s ]\n",
 				(float)GetCopySize() / 1024.0f / 1024.0f, m_sName.c_str());
-		}*/
+		}
 		return true;
 	}
 
@@ -218,47 +217,22 @@ struct Topology
 struct ConstraintPBD
 {
 	Topology topol;
-	BufferFloat restLengthBuffer;  // determine the rest pos structure of constrs
+	BufferFloat restReference;  // determine the rest pos structure of constrs
 	BufferVector3f prdPBuffer;
-	BufferVector3f restPosBuffer;
-	BufferVector3f restAngleBuffer;
+	BufferVector3f velBuffer;
+	BufferFloat mass;
 	//BufferFloat thickness;
-	BufferFloat stiffnessBuffer;
+	BufferFloat stiffness;
 	BufferInt constraintType;
-	HardwareType ht;  // inialized in PBDObject
-
 	// Util Maps
 	std::map<int, std::vector<int>> Point2PrimsMap;
 	P2P Prim2PrimsMap;
-
 	// edge coloring
 	BufferInt color; // reserved for edge coloring
 	BufferInt prdColor; // reserved for edge coloring
+	BufferInt sortedColor;  // reserved for edge coloring
 	BufferInt sortedPrimId; // reserved for edge coloring
 	BufferInt2 colorWorksets;
-	int detectConflict;
-	int* dFlag; // detectConflicts used for GPU allocation 
-
-	// init three constraints
-	void InitDistanceConstr(BufferVector3f& meshPosBuffer, float stiffness, int resY, int resX);
-	void InitBendingConstr();
-	void InitAnchorConstr(BufferVector3f& meshPosBuffer, float stiffness, int resY);
-
-	void InitDistanceIndices(int resY, int resX);
-	void InitDistanceInfo(BufferVector3f& meshPosBuffer, float stiffness);
-
-	// init two maps for edge coloring
-	void GenePoint2PrimsMap(Topology topol);
-	void GenePrim2PrimsMap(Topology topol);
-
-	// TODO: Edge Coloring 
-	void AssignColorsCPU();
-	void ResolveConflictsCPU();
-	void EdgeColoring(int iterations);
-	void EdgeColoringCPU(int iterations);
-	void EdgeColoringGPU(int iterations);
-	void SortEdgesColors();
-	void EvalWorksets();
 };
 
 
@@ -272,35 +246,53 @@ public:
 	PBDObject(float dampingRate, float3 gravity, int resX, int resY, float sizeX, float sizeY, HardwareType ht) :
 		dampingRate(dampingRate), gravity(gravity), resX(resX), resY(resY), sizeX(sizeX), sizeY(sizeY), ht(ht)
 	{
-
+		Init();
 	}
 	~PBDObject()
 	{
-		if(ht == GPU)
-			freeGPUBuffers();
-	} 
+		freeGPUBuffers();
+	}
+	//static PBDObject* Create(std::string topologyPath, std::string constraintPath)
+	//{
+	//	PBDObject* ret = new PBDObject();
+	//	//
+	//	//
+	//	//
+	//	return ret;
+	//}
+	void InitConstr(int numOfConstr, float unitMass, float* stiffnesses);
+	void SortEdgesColors();
+	void EvalWorksets();
 
-	void Init();
-	void setConstrOption(uint ct, float* stiffnessSetting);
 	Topology meshTopol;  // opengl will draw this topol
 	ConstraintPBD constrPBDBuffer;
-	uint ct;
-	BufferVector3f velBuffer;
-	BufferFloat massBuffer;
+	BufferVector3f restPosBuffer;
 	float dampingRate;
 	float3 gravity;
 	HardwareType ht;
 	int resX, resY;
 	float sizeX, sizeY;
-	float* stiffnessSetting;  // [DISTANCE, BENDING, ANCHOR]
+
+	int detectConflict;
+	int* dFlag; // detectConflicts used for GPU allocation 
 
 private:
-	void InitMeshTopol();
-	void InitMassVel();
-	void InitPosition(float2 cord);
-	void InitMeshTopolIndices();
-	void InitConstr();
-	
+	void Init();
+	void CreatePosition(BufferVector3f& positionBuffer, float2 cord, float sizeX, float sizeY, int resY, int resX);
+	void CreateOpenGLIndices(BufferInt& openGLIndices, int resY, int resX);
+	void CreateDistanceIndices(BufferInt& indices, int resY, int resX);
+	void CreateDistanceConstr(BufferVector3f& positionBuffer, BufferInt2& primList, BufferInt& indices, BufferInt& sortedPrimID, float stiffness, float unitMass);
+
+	// init two maps for edge coloring
+	void GenePoint2PrimsMap(Topology topol);
+	void GenePrim2PrimsMap(Topology topol);
+
+	// TODO: Edge Coloring 
+	void AssignColorsCPU();
+	void ResolveConflictsCPU();
+	void EdgeColoring(int iterations);
+	void EdgeColoringCPU(int iterations);
+	void EdgeColoringGPU(int iterations);
 
 	void groundTruthTest();
 
