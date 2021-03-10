@@ -2,18 +2,18 @@
 #define PBD_BASIC_H
 
 #include <iostream>
-#include<fstream>
-#include<vector>
+#include <fstream>
+#include <vector>
 #include <map>
 #include <string>
 #include <set>
-#include<assert.h>
-#include<algorithm>
-#include<vector_types.h>
-#include<vector_functions.h>
+#include <assert.h>
+#include <algorithm>
+#include <vector_types.h>
+#include <vector_functions.h>
 #include "cuda_runtime.h"
 #include "helper_math.h"
-#include"thrust/sort.h"
+#include "thrust/sort.h"
 #include <device_launch_parameters.h>
 
 using namespace std;
@@ -21,8 +21,6 @@ using namespace std;
 #define KERNEL_FUNC __device__ __host__ 
 #define FORBIDBITS 64
 #define MAXFORBID 18446744073709551615ul
-
-//KERNEL_FUNC float Length(float3 vec) pow(vec.x*vec.x + vec.y *vec.y + vec.z *vec.z, 0.5)
 
 enum ConstraintType
 {
@@ -261,7 +259,6 @@ struct ConstraintPBD
 	void EvalWorksets();
 };
 
-
 class PBDObject
 {
 public:
@@ -281,7 +278,8 @@ public:
 	}
 
 	void Init();
-	void setConstrOption(uint ct, float* stiffnessSetting);
+	void SetConstrOption(uint ct, float* stiffnessSetting);
+
 	Topology meshTopol;  // opengl will draw this topol
 	ConstraintPBD constrPBDBuffer;
 	uint ct;
@@ -295,11 +293,11 @@ public:
 	float* stiffnessSetting;  // [DISTANCE, BENDING, ANCHOR]
 
 private:
-	void InitMeshTopol();
-	void InitMassVel();
-	void InitPosition(float2 cord);
-	void InitMeshTopolIndices();
-	void InitConstr();
+	void initMeshTopol();
+	void initMassVel();
+	void initPosition(float2 cord);
+	void initMeshTopolIndices();
+	void initConstr();
 
 
 	void groundTruthTest();
@@ -322,22 +320,22 @@ public:
 	}
 	void SetTarget(PBDObject* pbdObj)
 	{
-		this->pbdObj = pbdObj;
-		this->ht = pbdObj->ht;
+		this->m_pbdObj = pbdObj;
+		this->m_ht = pbdObj->ht;
 	}
 	void Advect(float dt);
 	void ProjectConstraint(SolverType st, int iterations);
 	void Integration(float dt);
 
 private:
-	PBDObject* pbdObj;
-	HardwareType ht;
-	void AdvectCPU(float dt);
-	void AdvectGPU(float dt);
-	void ProjectConstraintCPU(SolverType st, int iterations);
-	void ProjectConstraintGPU(SolverType st, int iterations);
-	void IntegrationCPU(float dt);
-	void IntegrationGPU(float dt);
+	PBDObject* m_pbdObj;
+	HardwareType m_ht;
+	void advectCPU(float dt);
+	void advectGPU(float dt);
+	void projectConstraintCPU(SolverType st, int iterations);
+	void projectConstraintGPU(SolverType st, int iterations);
+	void integrationCPU(float dt);
+	void integrationGPU(float dt);
 };
 
 namespace IO
@@ -374,47 +372,5 @@ namespace IO
 		ofs.close();
 	}
 }
-//
-// 
-//namespace Kernel
-//{
-//
-//	__global__ void projectConstraintD(
-//		float3* posBuf,
-//		int* induices,
-//		int2* sortedPrims,
-//		int* typeBuf,
-//		int nPrims)
-//	{
-//		if (primId >= nPrims)
-//			return;
-//		int type = typeBuf[primId];
-//		if (type == ConstraintType::DISTANCE)
-//		{
-//			projectDistance();
-//			posBuf[]
-//			posBuf[]
-//		}
-//		if (type == ConstraintType::Attach)
-//		{
-//			projectAttach();
-//			posBuf[]
-//				
-//		}
-//
-//		if (type == ConstraintType::BENDING)
-//		{
-//			projectAttach();
-//			posBuf[]
-//			posBuf[]
-//			posBuf[]
-//			posBuf[]
-//
-//		}
-//	}
-//
-//	__device__ inline void projectDistance(float3& p0,float3& p1);
-//	__device__ inline void projectAttach();
-//}
 
 #endif

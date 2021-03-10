@@ -11,7 +11,7 @@ using namespace std;
 void WritePointsToFile(BufferVector3f positionBuffer, int frame)
 {
 	fstream file;
-	string path = "D://0301PBDCUDA//Test0308//GPUPrdp." + to_string(frame) + ".obj";
+	string path = "D:/pointobjPBD/mG." + to_string(frame) + ".obj";
 	file.open(path, ios::out);
 	file << "g" << endl;
 	for (int i = 0; i < positionBuffer.GetSize(); i++)
@@ -26,8 +26,8 @@ int main()
 	auto start = chrono::steady_clock::now();
 	clock_t tStart = clock();
 
-	int resY = 256;
-	int resX = 256;
+	int resY = 64;
+	int resX = 64;
 	float dampingRate = 0.9f;
 	float sizeX = 10.0f;
 	float sizeY = 10.0f;
@@ -41,7 +41,7 @@ int main()
 	float stiffnessSetting[1] = { 1.0f };
 
 	PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY, ht);
-	pbdObj.setConstrOption(DISTANCE | ANCHOR, stiffnessSetting);
+	pbdObj.SetConstrOption(DISTANCE | ANCHOR, stiffnessSetting);
 	pbdObj.Init();
 
 	SolverPBD solver;

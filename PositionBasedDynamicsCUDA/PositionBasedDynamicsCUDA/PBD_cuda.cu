@@ -1,4 +1,4 @@
-#include "PBD_Basic.cuh"
+ï»¿#include "PBD_Basic.cuh"
 
 KERNEL_FUNC float Distance(float3 p1, float3 p2)
 {
@@ -57,7 +57,7 @@ void ConstraintPBD::InitDistanceInfo(BufferVector3f& meshPosBuffer, float stiffn
 {
 	//
 	// constraint allocation 
-	//	ÖÊµã+µ¯»ÉÏµÍ³
+	//	ï¿½Êµï¿½+ï¿½ï¿½ï¿½ï¿½ÏµÍ³
 	// 
 	int count = 2;
 	int prims = topol.indices.GetSize() / count;
@@ -116,7 +116,7 @@ void ConstraintPBD::InitBendingConstr()
 	for (auto edge : edge2primMap)
 	{
 		//edge2primMap numEdge*2
-		// Á÷ÐÎÍØÆË
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		// edge 2 prim
 		// int2 List;
 	}
@@ -628,29 +628,29 @@ void ConstraintPBD::EvalWorksets()
 // PBDObject class
 void PBDObject::Init()
 {
-	InitMeshTopol();
-	InitConstr();
+	initMeshTopol();
+	initConstr();
 }
 
-void PBDObject::setConstrOption(uint ct, float* stiffnessSetting)
+void PBDObject::SetConstrOption(uint ct, float* stiffnessSetting)
 {
 	this->ct = ct;
 	this->stiffnessSetting = stiffnessSetting;
 }
 
-void PBDObject::InitMeshTopol()
+void PBDObject::initMeshTopol()
 {
 	// OpenGL Topology
 	meshTopol.indices.SetName("Indices");
 	meshTopol.posBuffer.SetName("P");
 	meshTopol.primList.SetName("primList");
 
-	InitPosition(make_float2(0.0, 0.0));
-	InitMassVel();
-	InitMeshTopolIndices();
+	initPosition(make_float2(0.0, 0.0));
+	initMassVel();
+	initMeshTopolIndices();
 }
 
-void PBDObject::InitMassVel()
+void PBDObject::initMassVel()
 {
 	// init mass
 	float3 initVel = make_float3(0.0f, 0.0f, 0.0f);
@@ -761,7 +761,7 @@ void PBDObject::freeGPUBuffers()
 
 // init : allocation
 // setvalue
-void PBDObject::InitConstr()
+void PBDObject::initConstr()
 {
 	constrPBDBuffer.ht = ht;
 	constrPBDBuffer.topol.posBuffer = meshTopol.posBuffer;
@@ -791,7 +791,7 @@ void PBDObject::InitConstr()
 	constrPBDBuffer.EdgeColoring(20000);
 }
 
-void PBDObject::InitPosition(float2 cord)
+void PBDObject::initPosition(float2 cord)
 {
 	auto positionBuffer = &(meshTopol.posBuffer);
 	float lengthInterval = sizeX / (resX - 1);
@@ -814,7 +814,7 @@ void PBDObject::InitPosition(float2 cord)
 	constrPBDBuffer.restPosBuffer.m_Data.push_back(positionBuffer->m_Data[resX - 1]);
 }
 
-void PBDObject::InitMeshTopolIndices()
+void PBDObject::initMeshTopolIndices()
 {
 	auto meshTopolIndicies = &(meshTopol.indices);
 	int num = resY * resX;
@@ -882,33 +882,33 @@ void __global__ AdvectGPUKernel(
 
 void SolverPBD::Advect(float dt)
 {
-	switch (ht)    // TODO: change back to ht
+	switch (m_ht)    // TODO: change back to ht
 	{
 	case CPU:
-		AdvectCPU(dt);
+		advectCPU(dt);
 		break;
 	case GPU:
-		AdvectGPU(dt);
+		advectGPU(dt);
 		break;
 	default:
 		break;
 	}
 }
 
-void SolverPBD::AdvectCPU(float dt)
+void SolverPBD::advectCPU(float dt)
 {
-	auto velBuffer = &(pbdObj->velBuffer);
-	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
-	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
+	auto velBuffer = &(m_pbdObj->velBuffer);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(m_pbdObj->meshTopol.posBuffer);
 
 	for (int i = 0; i < velBuffer->GetSize(); i++)
 	{
 		/*if (i == 30)
 			printf("old velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
-		velBuffer->m_Data[i] += pbdObj->gravity * dt;
+		velBuffer->m_Data[i] += m_pbdObj->gravity * dt;
 		/*if(i == 30)
 			printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
-		velBuffer->m_Data[i] *= powf(pbdObj->dampingRate, dt);
+		velBuffer->m_Data[i] *= powf(m_pbdObj->dampingRate, dt);
 
 		prdPBuffer->m_Data[i] = positionBuffer->m_Data[i] + velBuffer->m_Data[i] * dt;
 
@@ -917,12 +917,12 @@ void SolverPBD::AdvectCPU(float dt)
 	}
 }
 
-void SolverPBD::AdvectGPU(float dt)
+void SolverPBD::advectGPU(float dt)
 {
-	auto velBuffer = &(pbdObj->velBuffer);
-	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
-	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
-	auto massBuffer = &(pbdObj->massBuffer);
+	auto velBuffer = &(m_pbdObj->velBuffer);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(m_pbdObj->meshTopol.posBuffer);
+	auto massBuffer = &(m_pbdObj->massBuffer);
 
 	//printf("Before Advect GPU:");
 	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
@@ -931,8 +931,8 @@ void SolverPBD::AdvectGPU(float dt)
 	//	prdPBuffer->m_Data[pbdObj->resY - 1].z );
 
 	int pointNum = prdPBuffer->GetSize();
-	float dampingRate = pbdObj->dampingRate;
-	float3 gravity = pbdObj->gravity;
+	float dampingRate = m_pbdObj->dampingRate;
+	float3 gravity = m_pbdObj->gravity;
 
 	uint2 blockSize = positionBuffer->EvalBlockSize(512);
 	//printf("Advect GPU: block dim = %d, thread dim = %d\n", blockSize.x, blockSize.y);
@@ -962,28 +962,28 @@ void SolverPBD::AdvectGPU(float dt)
 
 void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 {
-	switch (ht)    // TODO: change back to ht
+	switch (m_ht)    // TODO: change back to ht
 	{
 	case CPU:
-		ProjectConstraintCPU(st, iterations);
+		projectConstraintCPU(st, iterations);
 		break;
 	case GPU:
-		ProjectConstraintGPU(st, iterations);
+		projectConstraintGPU(st, iterations);
 		break;
 	default:
 		break;
 	}
 }
 
-void SolverPBD::ProjectConstraintCPU(SolverType st, int iterations)
+void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 {
-	auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
-	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
-	auto massBuffer = &(pbdObj->massBuffer);
-	auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restLengthBuffer);
-	auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffnessBuffer);
-	auto restPosBuffer = &(pbdObj->constrPBDBuffer.restPosBuffer);
-	auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
+	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	auto massBuffer = &(m_pbdObj->massBuffer);
+	auto restLengthBuffer = &(m_pbdObj->constrPBDBuffer.restLengthBuffer);
+	auto stiffnessBuffer = &(m_pbdObj->constrPBDBuffer.stiffnessBuffer);
+	auto restPosBuffer = &(m_pbdObj->constrPBDBuffer.restPosBuffer);
+	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
 	//printf("Before Project Constraint CPU:");
 	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
 	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
@@ -1022,7 +1022,7 @@ void SolverPBD::ProjectConstraintCPU(SolverType st, int iterations)
 			{
 				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
 			}
-			if (j == pbdObj->resY - 1)
+			if (j == m_pbdObj->resY - 1)
 			{
 				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
 			}
@@ -1117,23 +1117,23 @@ void __global__ ProjectContraintsGPUKernel(
 	}
 }
 
-void SolverPBD::ProjectConstraintGPU(SolverType st, int iterations)
+void SolverPBD::projectConstraintGPU(SolverType st, int iterations)
 {
 
-	pbdObj->constrPBDBuffer.SortEdgesColors();
-	pbdObj->constrPBDBuffer.EvalWorksets();
+	m_pbdObj->constrPBDBuffer.SortEdgesColors();
+	m_pbdObj->constrPBDBuffer.EvalWorksets();
 	// cout << "--------" << __FUNCTION__ << "--------" << endl;
 
-	auto worksets = &(pbdObj->constrPBDBuffer.colorWorksets);
-	auto primList = &(pbdObj->constrPBDBuffer.topol.primList);
-	auto sortedPrimId = &(pbdObj->constrPBDBuffer.sortedPrimId);
-	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
-	auto massBuffer = &(pbdObj->massBuffer);
-	auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restLengthBuffer);
-	auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffnessBuffer);
-	auto restPosBuffer = &(pbdObj->constrPBDBuffer.restPosBuffer);
-	auto indices = &(pbdObj->constrPBDBuffer.topol.indices);
-	auto constraintType = &(pbdObj->constrPBDBuffer.constraintType);
+	auto worksets = &(m_pbdObj->constrPBDBuffer.colorWorksets);
+	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
+	auto sortedPrimId = &(m_pbdObj->constrPBDBuffer.sortedPrimId);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	auto massBuffer = &(m_pbdObj->massBuffer);
+	auto restLengthBuffer = &(m_pbdObj->constrPBDBuffer.restLengthBuffer);
+	auto stiffnessBuffer = &(m_pbdObj->constrPBDBuffer.stiffnessBuffer);
+	auto restPosBuffer = &(m_pbdObj->constrPBDBuffer.restPosBuffer);
+	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
+	auto constraintType = &(m_pbdObj->constrPBDBuffer.constraintType);
 
 	for (int i = 0; i < iterations; ++i)
 	{
@@ -1191,7 +1191,7 @@ void SolverPBD::ProjectConstraintGPU(SolverType st, int iterations)
 			}*/
 
 			ProjectContraintsGPUKernel << <numBlock, numThread >> > (
-				pbdObj->resY,
+				m_pbdObj->resY,
 				start,
 				num,
 				i,
@@ -1248,24 +1248,24 @@ void SolverPBD::ProjectConstraintGPU(SolverType st, int iterations)
 
 void SolverPBD::Integration(float dt)
 {
-	switch (ht)    // TODO: change back to ht
+	switch (m_ht)    // TODO: change back to ht
 	{
 	case CPU:
-		IntegrationCPU(dt);
+		integrationCPU(dt);
 		break;
 	case GPU:
-		IntegrationGPU(dt);
+		integrationGPU(dt);
 		break;
 	default:
 		break;
 	}
 }
 
-void SolverPBD::IntegrationCPU(float dt)
+void SolverPBD::integrationCPU(float dt)
 {
-	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
-	auto velBuffer = &(pbdObj->velBuffer);
-	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(m_pbdObj->meshTopol.posBuffer);
+	auto velBuffer = &(m_pbdObj->velBuffer);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
 
 	for (size_t i = 0; i < positionBuffer->GetSize(); i++)
 	{
@@ -1292,11 +1292,11 @@ void __global__ IntegrationGPUKernel(
 }
 
 // TODO
-void SolverPBD::IntegrationGPU(float dt)
+void SolverPBD::integrationGPU(float dt)
 {
-	auto positionBuffer = &(pbdObj->meshTopol.posBuffer);
-	auto velBuffer = &(pbdObj->velBuffer);
-	auto prdPBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+	auto positionBuffer = &(m_pbdObj->meshTopol.posBuffer);
+	auto velBuffer = &(m_pbdObj->velBuffer);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
 	/*printf("Before Integration GPU:");
 	printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
 		prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
