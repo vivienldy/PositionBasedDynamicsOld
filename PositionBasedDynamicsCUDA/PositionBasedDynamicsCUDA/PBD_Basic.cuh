@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <fstream>
+#include<ostream>
 #include <vector>
 #include <map>
 #include <string>
@@ -15,6 +16,7 @@
 #include "helper_math.h"
 #include "thrust/sort.h"
 #include <device_launch_parameters.h>
+
 
 using namespace std;
 
@@ -200,6 +202,7 @@ typedef Buffer<float> BufferFloat;
 typedef Buffer<float3> BufferVector3f;
 typedef Buffer<int2> BufferInt2;
 
+
 struct P2P
 {
 	BufferInt indices;
@@ -372,5 +375,4 @@ namespace IO
 		ofs.close();
 	}
 }
-
 #endif

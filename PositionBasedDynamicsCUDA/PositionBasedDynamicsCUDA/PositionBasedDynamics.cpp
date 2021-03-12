@@ -4,6 +4,8 @@
 # include <thrust/host_vector.h>
 #include <chrono>
 #include"PBD_Basic.cuh"
+#include"CCD_Basic.h"
+
 
 using namespace std;
 
@@ -23,58 +25,75 @@ void WritePointsToFile(BufferVector3f positionBuffer, int frame)
 
 int main()
 {
-	auto start = chrono::steady_clock::now();
-	clock_t tStart = clock();
+	float3 vtx_o = make_float3(0.0f, 0.0f, 2.0f);
+	float3 vtx_p = make_float3(0.0f, 0.0f, -1.0f);
 
-	int resY = 64;
-	int resX = 64;
-	float dampingRate = 0.9f;
-	float sizeX = 10.0f;
-	float sizeY = 10.0f;
-	float3 gravity = make_float3(0.0, -10.0, 0.0);
-	int startFrame = 1;
-	int endFrame = 20;
-	int substep = 4;
-	int iteration = 10;
-	HardwareType ht = GPU;
-	SolverType st = GAUSSSEIDEL;
-	float stiffnessSetting[1] = { 1.0f };
+	float3 p1_o = make_float3(1.0f, 1.0f, 0.0f);
+	float3 p2_o = make_float3(-1.0f, 0.0f, 0.0f);
+	float3 p3_o = make_float3(1.0f, -1.0f, 0.0f);
+	
+	float3 p1_p = make_float3(1.0f, 1.0f, 3.0f);
+	float3 p2_p = make_float3(-1.0f, 0.0f, 3.0f);
+	float3 p3_p = make_float3(1.0f, -1.0f, 3.0f);
+	
+	CCDTestMain();
+	/*float d = Point2Plane(vtx_o, p1_o, p2_o, p3_o);
+	printf("%f", d);
+	bool f = IsSide(vtx_p, p1_o, make_float3(0.0f, 0.0f, 1.0f));
+	cout << f << endl;*/
+	//CollisionTest(vtx_o,  p1_o,  p2_o,  p3_o,vtx_p,  p1_p,  p2_p,  p3_p, Contact::VF,  contact);
+	//auto start = chrono::steady_clock::now();
+	//clock_t tStart = clock();
 
-	PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY, ht);
-	pbdObj.SetConstrOption(DISTANCE | ANCHOR, stiffnessSetting);
-	pbdObj.Init();
+	//int resY = 64;
+	//int resX = 64;
+	//float dampingRate = 0.9f;
+	//float sizeX = 10.0f;
+	//float sizeY = 10.0f;
+	//float3 gravity = make_float3(0.0, -10.0, 0.0);
+	//int startFrame = 1;
+	//int endFrame = 20;
+	//int substep = 4;
+	//int iteration = 10;
+	//HardwareType ht = GPU;
+	//SolverType st = GAUSSSEIDEL;
+	//float stiffnessSetting[1] = { 1.0f };
 
-	SolverPBD solver;
-	solver.SetTarget(&pbdObj);
+	//PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY, ht);
+	//pbdObj.SetConstrOption(DISTANCE | ANCHOR, stiffnessSetting);
+	//pbdObj.Init();
 
-	pbdObj.meshTopol.indices = pbdObj.constrPBDBuffer.topol.indices;
-	pbdObj.meshTopol.primList = pbdObj.constrPBDBuffer.topol.primList;
+	//SolverPBD solver;
+	//solver.SetTarget(&pbdObj);
 
-	//IO::SaveToplogy(pbdObj.meshTopol, "D:/GPUtopol.cache");
-	//cout << "topol saved" << endl;
-	//IO::SaveBuffer(pbdObj.constrPBDBuffer.color, "D:/GPUcolor.cache");
-	//cout << "color saved" << endl;
+	//pbdObj.meshTopol.indices = pbdObj.constrPBDBuffer.topol.indices;
+	//pbdObj.meshTopol.primList = pbdObj.constrPBDBuffer.topol.primList;
 
-	int fps = 24;
-	float dt = 1.0 / fps / (float)substep;
-	////int frame = 0
-	//solver.Advect(dt);
-	//solver.ProjectConstraint(GAUSSSEIDEL, iteration);
-	//WritePointsToFile(pbdObj.constrPBDBuffer.prdPBuffer, 0);
+	////IO::SaveToplogy(pbdObj.meshTopol, "D:/GPUtopol.cache");
+	////cout << "topol saved" << endl;
+	////IO::SaveBuffer(pbdObj.constrPBDBuffer.color, "D:/GPUcolor.cache");
+	////cout << "color saved" << endl;
 
-	for (size_t i = startFrame; i < endFrame; i++)
-	{
-		for (size_t s = 0; s < substep; s++)
-		{
-			solver.Advect(dt);
-			solver.ProjectConstraint(st, iteration);
-			solver.Integration(dt);
-		}
-		// WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
-	}
+	//int fps = 24;
+	//float dt = 1.0 / fps / (float)substep;
+	//////int frame = 0
+	////solver.Advect(dt);
+	////solver.ProjectConstraint(GAUSSSEIDEL, iteration);
+	////WritePointsToFile(pbdObj.constrPBDBuffer.prdPBuffer, 0);
 
-	auto end = chrono::steady_clock::now();
-	auto diff = end - start;
-	cout << chrono::duration <double, milli>(diff).count() << " ms" << endl;
+	//for (size_t i = startFrame; i < endFrame; i++)
+	//{
+	//	for (size_t s = 0; s < substep; s++)
+	//	{
+	//		solver.Advect(dt);
+	//		solver.ProjectConstraint(st, iteration);
+	//		solver.Integration(dt);
+	//	}
+	//	// WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
+	//}
 
+	//auto end = chrono::steady_clock::now();
+	//auto diff = end - start;
+	//cout << chrono::duration <double, milli>(diff).count() << " ms" << endl;
+	return 0;
 }
