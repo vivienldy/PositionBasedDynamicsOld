@@ -10,7 +10,7 @@ SpatialHashSystem::SpatialHashSystem(string filename, uint3 gridSize, HardwareTy
 
 	m_worldOrigin = make_float3(0.0f, 0.0f, 0.0f); // should be initialized by the user
 	m_numGridCells = m_gridSize.x * m_gridSize.y * m_gridSize.z;
-	cout << "m_numGridCells: " << m_numGridCells << endl;
+	//cout << "m_numGridCells: " << m_numGridCells << endl;
 
 	m_cellSize = make_float3(2.0f, 2.0f, 2.0f);
 
@@ -24,7 +24,7 @@ SpatialHashSystem::SpatialHashSystem(string filename, uint3 gridSize, HardwareTy
 
 }
 
-SpatialHashSystem::SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxBuffer, HardwareType ht) :
+SpatialHashSystem::SpatialHashSystem(BufferVector3f& posBuffer, BufferInt& triIdxBuffer, HardwareType ht) :
 	m_ht(ht)
 {
 	// init m_numTriangles, m_loadSuccess, m_hPosBuffer, m_hTriIdxBuffer
@@ -35,7 +35,7 @@ SpatialHashSystem::SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxB
 
 	m_worldOrigin = make_float3(0.0f, 0.0f, 0.0f); // should be initialized by the user
 	m_numGridCells = m_gridSize.x * m_gridSize.y * m_gridSize.z;
-	cout << "m_numGridCells: " << m_numGridCells << endl;
+	//cout << "m_numGridCells: " << m_numGridCells << endl;
 
 	m_cellSize = make_float3(2.0f, 2.0f, 2.0f);
 
@@ -44,7 +44,7 @@ SpatialHashSystem::SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxB
 	m_hCellStart.m_Data.resize(m_numTriangles, -1);
 	m_hCellEnd.m_Data.resize(m_numTriangles, -1);
 	m_hTriCentroidBuffer.m_Data.resize(m_numTriangles, make_float3(0.0f, 0.0f, 0.0f));
-	m_targetId = 645;
+	m_targetId = 0;
 	evalTriCentroids();
 
 }
@@ -72,7 +72,7 @@ void SpatialHashSystem::InitSH()
 	float shiftY = (m_gridSize.y * m_cellSize.y) / 2;
 	float shiftZ = (m_gridSize.z * m_cellSize.z) / 2;
 	m_girdStartPos = m_worldOrigin - make_float3(shiftX, shiftY, shiftZ);
-	printf("grid start pos is %f, %f, %f\n", m_girdStartPos.x, m_girdStartPos.y, m_girdStartPos.z);
+	//printf("grid start pos is %f, %f, %f\n", m_girdStartPos.x, m_girdStartPos.y, m_girdStartPos.z);
 	m_initialized = true;
 }
 
@@ -164,12 +164,23 @@ void SpatialHashSystem::UpdateSH(float dt)
 	}
 }
 
+bool SpatialHashSystem::outsideGrid(int3 gridPos)
+{
+	if (gridPos.x < 0 || gridPos.y < 0 || gridPos.z < 0 ||
+		gridPos.x >= m_gridSize.x || gridPos.y >= m_gridSize.y || gridPos.z >= m_gridSize.z)
+		return true;
+	else 
+		return false;
+}
+
 void SpatialHashSystem::FindNeighbors(BufferInt& neighbors,  // output: a list of triangle IDs (int)
 	uint targetTriID)   // input: a triangle ID 
 {
+	neighbors.m_Data.clear();
 	float3 targetTriCentroid = m_hTriCentroidBuffer.m_Data[targetTriID];
 	// get address in grid
 	int3 gridPos = calcGridPosCPU(targetTriCentroid);
+	// printf("\t gridPos: %d %d %d\n", gridPos.x, gridPos.y, gridPos.z);
 	uint cellStart;
 	uint cellEnd;
 	for (int z = -1; z <= 1; z++)
@@ -179,10 +190,15 @@ void SpatialHashSystem::FindNeighbors(BufferInt& neighbors,  // output: a list o
 			for (int x = -1; x <= 1; x++)
 			{
 				int3 neighborPos = gridPos + make_int3(x, y, z);
+				// check neighbor pos valid
+				if (outsideGrid(neighborPos))
+					continue;
+				//printf("\t valid neighbor pos : (%d, %d, %d)", neighborPos.x, neighborPos.y, neighborPos.z);
 				uint hashId = calcGridHashCPU(neighborPos);
 				cellStart = m_hCellStart.m_Data[hashId];
 				if (cellStart != -1)
 				{
+					//printf("\t hashId: %d\n", hashId);
 					cellEnd = m_hCellEnd.m_Data[hashId];
 					// cell range of a hash: [cellStart, cellEnd]
 					for (uint i = cellStart; i <= cellEnd; ++i)
@@ -232,7 +248,7 @@ void SpatialHashSystem::readMeshFromTxt(string filename)
 				// printf("vec %d: %f, %f, %f\n", i/3, vertexPos[0], vertexPos[1], vertexPos[2]);
 				m_hPosBuffer.m_Data.push_back(vertexPos);
 			}
-			std::cout << "m_hPosBuffer: " << m_hPosBuffer.GetSize() << endl;
+			//std::cout << "m_hPosBuffer: " << m_hPosBuffer.GetSize() << endl;
 			assert(m_hPosBuffer.GetSize() == dataStringList.size() / 3);
 			/*printf("0 (%f, %f, %f),615 (%f, %f, %f),1569 (%f, %f, %f)\n", m_hPosBuffer.m_Data[0].x, m_hPosBuffer.m_Data[0].y, m_hPosBuffer.m_Data[0].z,
 				m_hPosBuffer.m_Data[615].x, m_hPosBuffer.m_Data[615].y, m_hPosBuffer.m_Data[615].z, m_hPosBuffer.m_Data[1569].x, m_hPosBuffer.m_Data[1569].y,
@@ -248,7 +264,7 @@ void SpatialHashSystem::readMeshFromTxt(string filename)
 				m_hTriIdxBuffer.m_Data.push_back(std::stoi(dataStringList[i + 2]));
 				m_hTriangleId.m_Data.push_back((i / 3));
 			}
-			std::cout << "m_hTriangleId: " << m_hTriangleId.GetSize() << endl;
+			//std::cout << "m_hTriangleId: " << m_hTriangleId.GetSize() << endl;
 			m_numTriangles = m_hTriangleId.GetSize();
 			assert(m_hTriangleId.GetSize() == dataStringList.size() / 3);
 		}
@@ -256,7 +272,7 @@ void SpatialHashSystem::readMeshFromTxt(string filename)
 	}
 	in.close();
 	m_loadSuccess = true;
-	printf("Read File Done!\n");
+	//printf("Read File Done!\n");
 }
 
 void SpatialHashSystem::splitString(const std::string& src, std::vector<std::string>& v, const std::string& split)
@@ -292,11 +308,11 @@ void SpatialHashSystem::evalTriCentroids()
 	{
 		int triStart = triId * 3;
 		float3 p1 = posBuffer->m_Data[triIdxBuffer->m_Data[triStart]];
-		if (triId == m_targetId) printf("p1 %f, %f, %f\n", p1.x, p1.y, p1.z);
+		//if (triId == m_targetId) printf("p1 %f, %f, %f\n", p1.x, p1.y, p1.z);
 		float3 p2 = posBuffer->m_Data[triIdxBuffer->m_Data[triStart + 1]];
-		if (triId == m_targetId) printf("p2 %f, %f, %f\n", p2.x, p2.y, p2.z);
+		//if (triId == m_targetId) printf("p2 %f, %f, %f\n", p2.x, p2.y, p2.z);
 		float3 p3 = posBuffer->m_Data[triIdxBuffer->m_Data[triStart + 2]];
-		if (triId == m_targetId)  printf("p3 %f, %f, %f\n", p3.x, p3.y, p3.z);
+		//if (triId == m_targetId)  printf("p3 %f, %f, %f\n", p3.x, p3.y, p3.z);
 		currCentroid.x = (p1.x + p2.x + p3.x) / 3;
 		currCentroid.y = (p1.y + p2.y + p3.y) / 3;
 		currCentroid.z = (p1.z + p2.z + p3.z) / 3;
@@ -320,12 +336,12 @@ void SpatialHashSystem::calcHashCPU()
 		// store grid hash and particle index
 		triangleHash->m_Data[triId] = hashId;
 		triangleId->m_Data[triId] = triId;  // has been initialized if read mesh from txt
-		if (triId == m_targetId)
+		/*if (triId == m_targetId)
 		{
 			printf("triCentroidBuffer[triId]: (%f, %f, %f)\n", triCentroid.x, triCentroid.y, triCentroid.z);
 			printf("gridPos: %d, %d, %d\n", gridPos.x, gridPos.y, gridPos.z);
 			printf("triangleHash[triId]:triangleId[triId] -- ( %d, %d )\n", hashId, triangleId->m_Data[triId]);
-		}
+		}*/
 	}
 }
 

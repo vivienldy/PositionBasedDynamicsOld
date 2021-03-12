@@ -40,10 +40,9 @@ public:
 		this->m_topol = topol;
 		this->m_prdPBuffer = prdPBuffer;
 	}
-	void SetAcceStruct(Topology* topol, BufferVector3f* prdPBuffer)
+	void SetAcceStruct(SpatialHashSystem* shs)
 	{
-		this->m_topol = topol;
-		this->m_prdPBuffer = prdPBuffer;
+		this->m_shs = shs;
 	}
 	void SetThickness(float thickness)
 	{
@@ -58,7 +57,7 @@ public:
 private:
 	Topology* m_topol;
 	BufferVector3f* m_prdPBuffer;
-	SpatialHashSystem* m_shAcceStruct;
+	SpatialHashSystem* m_shs;
 	float m_Thickness;
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,

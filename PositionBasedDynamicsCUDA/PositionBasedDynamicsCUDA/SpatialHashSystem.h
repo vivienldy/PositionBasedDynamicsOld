@@ -9,7 +9,7 @@ class SpatialHashSystem
 {
 public:
 	SpatialHashSystem(string filename, uint3 gridSize, HardwareType ht);
-	SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxBuffer, HardwareType ht);
+	SpatialHashSystem(BufferVector3f& posBuffer, BufferInt& triIdxBuffer, HardwareType ht);
 	//SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxBuffer, uint numTriangles, uint3 gridSize, float oneCellSize, HardwareType ht);
 	~SpatialHashSystem() {};
 
@@ -59,6 +59,8 @@ protected: // functions
 
 	int3 calcGridPosCPU(float3 triPos);
 	uint calcGridHashCPU(int3 gridPos);
+
+	bool outsideGrid(int3 gridPos);
 
 protected: // data
 	// Grid configuration

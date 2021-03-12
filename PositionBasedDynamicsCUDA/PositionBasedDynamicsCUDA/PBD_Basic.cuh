@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <vector_types.h>
 #include <vector_functions.h>
+#include <chrono>
 #include "cuda_runtime.h"
 #include "helper_math.h"
 #include "thrust/sort.h"
+#include"timer.h"
 #include <device_launch_parameters.h>
 
 

@@ -2,7 +2,6 @@
 #include <string>
 #include "cuda_runtime.h"
 # include <thrust/host_vector.h>
-#include <chrono>
 #include"PBD_Basic.cuh"
 #include"CCD_Basic.h"
 
@@ -25,18 +24,21 @@ void WritePointsToFile(BufferVector3f positionBuffer, int frame)
 
 int main()
 {
-	float3 vtx_o = make_float3(0.0f, 0.0f, 2.0f);
-	float3 vtx_p = make_float3(0.0f, 0.0f, -1.0f);
+	//float3 vtx_o = make_float3(0.0f, 0.0f, 2.0f);
+	//float3 vtx_p = make_float3(0.0f, 0.0f, -1.0f);
 
-	float3 p1_o = make_float3(1.0f, 1.0f, 0.0f);
-	float3 p2_o = make_float3(-1.0f, 0.0f, 0.0f);
-	float3 p3_o = make_float3(1.0f, -1.0f, 0.0f);
+	//float3 p1_o = make_float3(1.0f, 1.0f, 0.0f);
+	//float3 p2_o = make_float3(-1.0f, 0.0f, 0.0f);
+	//float3 p3_o = make_float3(1.0f, -1.0f, 0.0f);
+	//
+	//float3 p1_p = make_float3(1.0f, 1.0f, 3.0f);
+	//float3 p2_p = make_float3(-1.0f, 0.0f, 3.0f);
+	//float3 p3_p = make_float3(1.0f, -1.0f, 3.0f);
 	
-	float3 p1_p = make_float3(1.0f, 1.0f, 3.0f);
-	float3 p2_p = make_float3(-1.0f, 0.0f, 3.0f);
-	float3 p3_p = make_float3(1.0f, -1.0f, 3.0f);
 	
 	CCDTestMain();
+	
+
 	/*float d = Point2Plane(vtx_o, p1_o, p2_o, p3_o);
 	printf("%f", d);
 	bool f = IsSide(vtx_p, p1_o, make_float3(0.0f, 0.0f, 1.0f));

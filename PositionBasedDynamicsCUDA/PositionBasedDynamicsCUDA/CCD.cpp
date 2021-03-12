@@ -126,21 +126,21 @@ bool CollisionSolver::VFTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o
 			float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,  
 	        Contact& contact)
 {		
-	//contact.type = Contact::VF;
-	//return(CollisionTest(vtx_o, p1_o, p2_o, p3_o, vtx_p, p1_p, p2_p, p3_p, Contact::VF, contact));
+	contact.type = Contact::VF;
+	return(CCDCollisionTest(vtx_o, p1_o, p2_o, p3_o, vtx_p, p1_p, p2_p, p3_p, Contact::VF, contact));
 
-	if (CCDCollisionTest(vtx_o, p1_o, p2_o, p3_o, vtx_p, p1_p, p2_p, p3_p, Contact::VF, contact))
-	{
-		contact.type = Contact::VF;
-		return true;
-	}
-	else if(VFTestDCD(vtx_o, p1_o, p2_o, p3_o, vtx_p, p1_p, p2_p, p3_p, contact))
-	{
-		contact.type = Contact::VFDCD;
-		return true;
-	}
-	else
-		return false;
+	//if (CCDCollisionTest(vtx_o, p1_o, p2_o, p3_o, vtx_p, p1_p, p2_p, p3_p, Contact::VF, contact))
+	//{
+	//	contact.type = Contact::VF;
+	//	return true;
+	//}
+	//else if(VFTestDCD(vtx_o, p1_o, p2_o, p3_o, vtx_p, p1_p, p2_p, p3_p, contact))
+	//{
+	//	contact.type = Contact::VFDCD;
+	//	return true;
+	//}
+	//else
+	//	return false;
 }
 
 bool CollisionSolver::VFTestDCD(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
@@ -156,7 +156,7 @@ bool CollisionSolver::VFTestDCD(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p
 	w[2] = BarycentricCoord(vtx_p, p1_p, p2_p, p3_p).x;
 	w[3] = BarycentricCoord(vtx_p, p1_p, p2_p, p3_p).x;
 	*contact.w = *w;
-	float3* n; //= &make_float3(0.0f,0.0f,0.0f);
+	float3* n  = &make_float3(0.0f,0.0f,0.0f);
 	*n = cross(normalize(p2_p - p1_p), normalize(p3_p - p1_p));
 	contact.n = *n;
 	bool inside;
@@ -189,8 +189,8 @@ bool CollisionSolver::CCDCollisionTest(float3 vtx_o, float3 p1_o, float3 p2_o, f
 		 //compute weight and normal
 		if (type == Contact::VF) {
 			d = signed_vf_distance(x0, x1, x2, x3, &n, w);
-			//inside = (min(-w[1], -w[2], -w[3]) >= -1e-6); 
-			inside = (min(w[1], w[2], w[3]) >= 1e-6);
+			inside = (min(-w[1], -w[2], -w[3]) >= -1e-6); 
+			//inside = (min(w[1], w[2], w[3]) >= 1e-6);
 		}
 		else {// Impact::EE
 			d = signed_ee_distance(x0, x1, x2, x3, &n, w);
@@ -407,51 +407,107 @@ void CollisionSolver::CCD_N2()
 
 void CollisionSolver::CCD_SH()
 {
-	//ContactData ctxData;
-	// for t : triangles
-		// for vtx : t.vertexs
-			// for nbt : nbTriangle
-				// DoVF(vtx,float3 p0,float3 p1,float3 p2)
-	// for each edge
-		// for each Triangle
-			// for each edge
-			// DoEE()
+	auto indices = &(m_topol->indices);
+	auto posBuffer = &(m_topol->posBuffer);
+	auto triList = &(m_topol->primList);
+	BufferInt neighborList;   // reserved for SH Find neighbor results
+	float3 vtxPos, triPos1, triPos2, triPos3, vtxPrdP, triPrdP1, triPrdP2, triPrdP3;
+	int i0, i1, i2, i3;
+	//printf("--------- entering find neighbor ----------------\n");
+	//m_shs->FindNeighbors(neighborList, 0);
+	//printf("neighbors list: ");
+	//for (int i = 0; i < neighborList.GetSize(); ++i)
+		//printf("%d ", neighborList.m_Data[i]);
+	for (int triId = 0; triId < triList->GetSize(); ++triId)
+	{
+		int start = triList->m_Data[triId].x;
+		int num = triList->m_Data[triId].y;
+		//printf("--------- entering find neighbor ----------------\n");
+		m_shs->FindNeighbors(neighborList, triId);
+		//printf("neighbors list: ");
+		//for (int i = 0; i < neighborList.GetSize(); ++i)
+			//printf("%d ", neighborList.m_Data[i]);
+		for (int vtxId = start; vtxId < start + num; ++vtxId)
+		{
+			i0 = indices->m_Data[vtxId];
+			vtxPos = posBuffer->m_Data[i0];
+			vtxPrdP = m_prdPBuffer->m_Data[i0];
+			for (int nbIdx = 0; nbIdx < neighborList.GetSize(); ++nbIdx)
+			{
+				int nbtriId = neighborList.m_Data[nbIdx];
+				int start = triList->m_Data[nbtriId].x;
+				i1 = indices->m_Data[start];
+				i2 = indices->m_Data[start + 1];
+				i3 = indices->m_Data[start + 2];
+				triPos1 = posBuffer->m_Data[i1];
+				triPos2 = posBuffer->m_Data[i2];
+				triPos3 = posBuffer->m_Data[i3];
+				triPrdP1 = m_prdPBuffer->m_Data[i1];
+				triPrdP2 = m_prdPBuffer->m_Data[i2];
+				triPrdP3 = m_prdPBuffer->m_Data[i3];
+				Contact contact;
+				if (VFTest(vtxPos, triPos1, triPos2, triPos3, vtxPrdP, triPrdP1, triPrdP2, triPrdP3, contact))
+				{
+					contactData.ctxs.m_Data.push_back(contact);
+					contactData.ctxStartNum.m_Data.push_back(make_int2(contactData.ctxIndices.GetSize(), 4));
+					contactData.ctxIndices.m_Data.push_back(i0);
+					contactData.ctxIndices.m_Data.push_back(i1);
+					contactData.ctxIndices.m_Data.push_back(i2);
+					contactData.ctxIndices.m_Data.push_back(i3);
+					//printf("%d", ctxData.ctxIndices.GetSize());
+				}
+			}
+		}
+	}
 }
 
 void CCDTestMain()
 {
 	CCDTest ccdTest;
-	ccdTest.PrepareTestData("D://0310ContinuousCollisionDectection//ccdTestData//CCDResolvePos.txt",
-											 "D://0310ContinuousCollisionDectection//ccdTestData//CCDResolvePrdP.txt");
+	ccdTest.PrepareTestData("D://0310ContinuousCollisionDectection//ccdTestData//ccdClothRestData.txt",
+											 "D://0310ContinuousCollisionDectection//ccdTestData//ccdClothData.txt");
 	CollisionSolver colliSolver;
 
+	float3 cellSize = make_float3(5.10f, 5.10f, 5.10f);
+	float3 gridCenter = make_float3(0.0f, 0.0f, 0.0f);
+	uint3 gridSize = make_uint3(3, 1, 3);
+
 	// initialize SH
-	//SpatialHashSystem shs(filepath, gridSize, ht);
-	//shs.SetGridCenter(girdCenter);
-	//shs.SetGridSize(gridSize);
-	//shs.SetDivision(cellSize);
-	//shs.InitSH();
+	SpatialHashSystem shs(ccdTest.topol.posBuffer, ccdTest.topol.indices, CPU);
+	shs.SetGridCenter(gridCenter);
+	shs.SetGridSize(gridSize);
+	shs.SetDivision(cellSize);
+	shs.InitSH();
+	shs.UpdateSH(0.0f);
 
 	colliSolver.SetTarget(&ccdTest.topol, &ccdTest.prdPBuffer);
 	colliSolver.SetThickness(0.5f);
+	colliSolver.SetAcceStruct(&shs);
 
+	auto start = chrono::steady_clock::now();
+	clock_t tStart = clock();
 
 	// collision detection
 	colliSolver.CCD_N2();
-	set<int> idList;
-	for (int i = 0; i < colliSolver.contactData.ctxStartNum.GetSize(); ++i)
-	{
-		int id = colliSolver.contactData.ctxStartNum.m_Data[i].x;
-		idList.insert(colliSolver.contactData.ctxIndices.m_Data[id]);
-	}
-	set<int>::iterator it;
-	printf("id: ");
-	for (it = idList.begin(); it != idList.end(); it++)
-	{
-		printf("%d -- ", *it);
-	}
+	//colliSolver.CCD_SH();
+	auto end = chrono::steady_clock::now();
+	auto diff = end - start;
+	cout << chrono::duration <double, milli>(diff).count() << " ms" << endl;
+
+	//set<int> idList;
+	//for (int i = 0; i < colliSolver.contactData.ctxStartNum.GetSize(); ++i)
+	//{
+	//	int id = colliSolver.contactData.ctxStartNum.m_Data[i].x;
+	//	idList.insert(colliSolver.contactData.ctxIndices.m_Data[id]);
+	//}
+	//set<int>::iterator it;
+	//printf("id: ");
+	//for (it = idList.begin(); it != idList.end(); it++)
+	//{
+	//	printf("%d -- ", *it);
+	//}
 	// collision resolves
-	colliSolver.CollisionResolve();
+	//colliSolver.CollisionResolve();
 	//ccdTest.writePointsToFile();
 }
 
@@ -461,7 +517,7 @@ double CollisionSolver::signed_vf_distance(const float3& x,
 	const float3& y0, const float3& y1, const float3& y2,
 	float3* n, double* w)
 {
-	cout << __FUNCTION__ << endl;
+	//cout << __FUNCTION__ << endl;
 	float3 _n;
 	if (!n)
 		n = &_n;
@@ -469,12 +525,12 @@ double CollisionSolver::signed_vf_distance(const float3& x,
 	if (!w)
 		w = _w;
 	*n = cross(normalize(y1 - y0), normalize(y2 - y0));
-	printf("vectors (%f, %f,  %f)\n", (y1 - y0).x, (y1 - y0).y, (y1 - y0).z);
-	printf("vectors (%f, %f,  %f)\n", (y2 - y0).x, (y2 - y0).y, (y2 - y0).z);
+	//printf("vectors (%f, %f,  %f)\n", (y1 - y0).x, (y1 - y0).y, (y1 - y0).z);
+	//printf("vectors (%f, %f,  %f)\n", (y2 - y0).x, (y2 - y0).y, (y2 - y0).z);
 	if (norm2(*n) < 1e-6)
 		return infinity;
 	*n = normalize(*n);
-	printf("n (%f, %f,  %f)\n", n->x, n->y, n->z);
+	//printf("n (%f, %f,  %f)\n", n->x, n->y, n->z);
 	double h = dot(x - y0, *n);
 	double b0 = stp(y1 - x, y2 - x, *n),
 		b1 = stp(y2 - x, y0 - x, *n),
@@ -483,12 +539,12 @@ double CollisionSolver::signed_vf_distance(const float3& x,
 	w[1] = -b0 / (b0 + b1 + b2);
 	w[2] = -b1 / (b0 + b1 + b2);
 	w[3] = -b2 / (b0 + b1 + b2);
-	printf("w (%f, %f,  %f)\n", w[1], w[2], w[3]);
-	float3 weight = BarycentricCoord(x, y0, y1, y2);
+	//printf("w (%f, %f,  %f)\n", w[1], w[2], w[3]);
+	/*float3 weight = BarycentricCoord(x, y0, y1, y2);
 	w[1] = weight.x;
 	w[2] = weight.y;
-	w[3] = weight.z;
-	printf("w (%f, %f,  %f)\n", BarycentricCoord(x, y0, y1, y2).x, BarycentricCoord(x, y0, y1, y2).y, BarycentricCoord(x, y0, y1, y2).z);
+	w[3] = weight.z;*/
+	//printf("w (%f, %f,  %f)\n", BarycentricCoord(x, y0, y1, y2).x, BarycentricCoord(x, y0, y1, y2).y, BarycentricCoord(x, y0, y1, y2).z);
 	
 	return h;
 }
