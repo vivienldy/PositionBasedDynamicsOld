@@ -5,9 +5,10 @@ SpatialHashSystem::SpatialHashSystem(string filename, uint3 gridSize, HardwareTy
 	m_ht(ht)
 {
 	// init m_numTriangles, m_loadSuccess, m_hPosBuffer, m_hTriIdxBuffer
-	readMeshFromTxt(filename);
+	//readMeshFromTxt(filename);
+	//assert(m_loadSuccess);
+	m_loadSuccess = IO::ReadClothFromTxt(filename, m_hPosBuffer, m_hTriIdxBuffer, m_hTriangleId, &m_numTriangles);
 	assert(m_loadSuccess);
-
 	m_worldOrigin = make_float3(0.0f, 0.0f, 0.0f); // should be initialized by the user
 	m_numGridCells = m_gridSize.x * m_gridSize.y * m_gridSize.z;
 	//cout << "m_numGridCells: " << m_numGridCells << endl;
@@ -169,7 +170,7 @@ bool SpatialHashSystem::outsideGrid(int3 gridPos)
 	if (gridPos.x < 0 || gridPos.y < 0 || gridPos.z < 0 ||
 		gridPos.x >= m_gridSize.x || gridPos.y >= m_gridSize.y || gridPos.z >= m_gridSize.z)
 		return true;
-	else 
+	else
 		return false;
 }
 
@@ -214,6 +215,7 @@ void SpatialHashSystem::FindNeighbors(BufferInt& neighbors,  // output: a list o
 }
 
 // I/O
+/*
 void SpatialHashSystem::readMeshFromTxt(string filename)
 {
 	std::fstream in;
@@ -250,9 +252,9 @@ void SpatialHashSystem::readMeshFromTxt(string filename)
 			}
 			//std::cout << "m_hPosBuffer: " << m_hPosBuffer.GetSize() << endl;
 			assert(m_hPosBuffer.GetSize() == dataStringList.size() / 3);
-			/*printf("0 (%f, %f, %f),615 (%f, %f, %f),1569 (%f, %f, %f)\n", m_hPosBuffer.m_Data[0].x, m_hPosBuffer.m_Data[0].y, m_hPosBuffer.m_Data[0].z,
+			printf("0 (%f, %f, %f),615 (%f, %f, %f),1569 (%f, %f, %f)\n", m_hPosBuffer.m_Data[0].x, m_hPosBuffer.m_Data[0].y, m_hPosBuffer.m_Data[0].z,
 				m_hPosBuffer.m_Data[615].x, m_hPosBuffer.m_Data[615].y, m_hPosBuffer.m_Data[615].z, m_hPosBuffer.m_Data[1569].x, m_hPosBuffer.m_Data[1569].y,
-				m_hPosBuffer.m_Data[1569].z);*/
+				m_hPosBuffer.m_Data[1569].z);
 		}
 		else  // second line of the input file: vertices tet
 		{
@@ -296,6 +298,7 @@ std::vector<std::string> SpatialHashSystem::splitString(const std::string& src, 
 	splitString(src, _ret, split);
 	return _ret;
 }
+*/
 
 // evaluate the centroid for each triangle
 void SpatialHashSystem::evalTriCentroids()

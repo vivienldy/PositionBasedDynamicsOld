@@ -165,6 +165,7 @@ void ConstraintPBD::GenePoint2PrimsMap(Topology topol)
 			Point2PrimsMap[indices->m_Data[currPrim.x + i]].push_back(primId);
 		}
 	}
+	// printf("generated point2prims map\n");
 }
 
 void ConstraintPBD::GenePrim2PrimsMap(Topology topol)
@@ -198,6 +199,7 @@ void ConstraintPBD::GenePrim2PrimsMap(Topology topol)
 			std::end(linkedPrimsSet));
 		Prim2PrimsMap.startNumList.m_Data.push_back(make_int2(startIdx, linkedPrimsSet.size()));
 	}
+	//printf("generated prim2prims map\n");
 }
 
 void ConstraintPBD::AssignColorsCPU()
@@ -632,6 +634,16 @@ void PBDObject::Init()
 	initConstr();
 }
 
+void PBDObject::Init(string topolFileName, string distConstrFileName)
+{
+	/*if ((IO::readTopolFromTxt(topolFileName, this)) && (IO::readDistConstrFromTxt(distConstrFileName, this)))
+		printf("PBD Object was initialized successfully\n");*/
+	bool readTopol = IO::ReadTopolFromTxt(topolFileName, this);
+	bool readConstr = IO::ReadDistConstrFromTxt(distConstrFileName, this);
+	if (readTopol && readConstr)
+		printf("PBD Object was initialized successfully\n");
+}
+
 void PBDObject::SetConstrOption(uint ct, float* stiffnessSetting)
 {
 	this->ct = ct;
@@ -670,7 +682,7 @@ void PBDObject::initMassVel()
 	}
 }
 
-void PBDObject::initGPUBuffers()
+void PBDObject::InitGPUBuffers()
 {
 	// printf("init GPU buffers\n");
 	auto dPrimList = &(constrPBDBuffer.topol.primList);
@@ -787,8 +799,11 @@ void PBDObject::initConstr()
 	constrPBDBuffer.GenePoint2PrimsMap(constrPBDBuffer.topol);
 	constrPBDBuffer.GenePrim2PrimsMap(constrPBDBuffer.topol);
 	if (ht == GPU)
-		initGPUBuffers();
-	constrPBDBuffer.EdgeColoring(20000);
+	{
+		InitGPUBuffers();
+		constrPBDBuffer.EdgeColoring(20000);
+	}
+
 }
 
 void PBDObject::initPosition(float2 cord)
@@ -982,7 +997,7 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 	auto massBuffer = &(m_pbdObj->massBuffer);
 	auto restLengthBuffer = &(m_pbdObj->constrPBDBuffer.restLengthBuffer);
 	auto stiffnessBuffer = &(m_pbdObj->constrPBDBuffer.stiffnessBuffer);
-	auto restPosBuffer = &(m_pbdObj->constrPBDBuffer.restPosBuffer);
+	// auto restPosBuffer = &(m_pbdObj->constrPBDBuffer.restPosBuffer);
 	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
 	//printf("Before Project Constraint CPU:");
 	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
@@ -1015,38 +1030,40 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 			prdPBuffer->m_Data[i1] += dp2;
 		}
 
-		for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
-		{
-			//attach points
-			if (j == 0)
-			{
-				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
-			}
-			if (j == m_pbdObj->resY - 1)
-			{
-				prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
-			}
+		// Attach Points
+		//for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
+		//{
+		//	//attach points
+		//	if (j == 0)
+		//	{
+		//		prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
+		//	}
+		//	if (j == m_pbdObj->resY - 1)
+		//	{
+		//		prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
+		//	}
 
-			////point collide with sphere
-			//bool isCollideSphere = ColliderSphere(prdPBuffer.m_Data[j], sphereOrigin, sphereRadius, j);
-			//if (isCollideSphere) //move the point to the point which intersect with sphere
-			//{
-			//	float3 moveVector = GenerateMoveVectorSphere(sphereOrigin, sphereRadius, prdPBuffer.m_Data[j], j);
-			//	prdPBuffer.m_Data[j] += moveVector;
-			//}
-			////point collide with ground
-			//bool isCollideGoround = CollideGround(prdPBuffer.m_Data[j], groundCenter);
-			//if (isCollideGoround)
-			//{
-			//	prdPBuffer.m_Data[j].y = groundCenter.y;
-			//}
-		}
+		//	////point collide with sphere
+		//	//bool isCollideSphere = ColliderSphere(prdPBuffer.m_Data[j], sphereOrigin, sphereRadius, j);
+		//	//if (isCollideSphere) //move the point to the point which intersect with sphere
+		//	//{
+		//	//	float3 moveVector = GenerateMoveVectorSphere(sphereOrigin, sphereRadius, prdPBuffer.m_Data[j], j);
+		//	//	prdPBuffer.m_Data[j] += moveVector;
+		//	//}
+		//	////point collide with ground
+		//	//bool isCollideGoround = CollideGround(prdPBuffer.m_Data[j], groundCenter);
+		//	//if (isCollideGoround)
+		//	//{
+		//	//	prdPBuffer.m_Data[j].y = groundCenter.y;
+		//	//}
+		//}
 	}
 	//printf("After Project Constraint CPU:");
 	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
 	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
 	//	prdPBuffer->m_Data[pbdObj->resY - 1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
 	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
+	// printf("Project Constraint\n");
 }
 
 void __global__ ProjectContraintsGPUKernel(

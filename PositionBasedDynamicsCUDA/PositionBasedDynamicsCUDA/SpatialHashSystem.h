@@ -25,9 +25,10 @@ public:
 
 protected: // functions
 	// I/O
-	void readMeshFromTxt(string filename);
+	// IO::FileManager m_fm;
+	/*void readMeshFromTxt(string filename);
 	void splitString(const std::string& src, std::vector<std::string>& v, const std::string& split);
-	std::vector<std::string> splitString(const std::string& src, const std::string& split);
+	std::vector<std::string> splitString(const std::string& src, const std::string& split);*/
 
 	// void initSpatialHash(uint1 numTriangles, uint3 gridSize, HardwareType ht);
 	// void initSpatialHash(uint1 numTriangles, uint3 gridSize, float cellSize, HardwareType ht);

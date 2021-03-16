@@ -12,7 +12,7 @@ using namespace std;
 void WritePointsToFile(BufferVector3f positionBuffer, int frame)
 {
 	fstream file;
-	string path = "D:/pointobjPBD/mG." + to_string(frame) + ".obj";
+	string path = "D://0310ContinuousCollisionDectection//0315Test//mG." + to_string(frame) + ".obj";
 	file.open(path, ios::out);
 	file << "g" << endl;
 	for (int i = 0; i < positionBuffer.GetSize(); i++)
@@ -22,77 +22,87 @@ void WritePointsToFile(BufferVector3f positionBuffer, int frame)
 	file.close();
 }
 
+// PBD CCD&SH Test
 int main()
 {
-	//float3 vtx_o = make_float3(0.0f, 0.0f, 2.0f);
-	//float3 vtx_p = make_float3(0.0f, 0.0f, -1.0f);
 
-	//float3 p1_o = make_float3(1.0f, 1.0f, 0.0f);
-	//float3 p2_o = make_float3(-1.0f, 0.0f, 0.0f);
-	//float3 p3_o = make_float3(1.0f, -1.0f, 0.0f);
-	//
-	//float3 p1_p = make_float3(1.0f, 1.0f, 3.0f);
-	//float3 p2_p = make_float3(-1.0f, 0.0f, 3.0f);
-	//float3 p3_p = make_float3(1.0f, -1.0f, 3.0f);
-	
-	
-	CCDTestMain();
-	
+	//CCDTestMain();
 
-	/*float d = Point2Plane(vtx_o, p1_o, p2_o, p3_o);
-	printf("%f", d);
-	bool f = IsSide(vtx_p, p1_o, make_float3(0.0f, 0.0f, 1.0f));
-	cout << f << endl;*/
-	//CollisionTest(vtx_o,  p1_o,  p2_o,  p3_o,vtx_p,  p1_p,  p2_p,  p3_p, Contact::VF,  contact);
 	//auto start = chrono::steady_clock::now();
 	//clock_t tStart = clock();
 
-	//int resY = 64;
-	//int resX = 64;
-	//float dampingRate = 0.9f;
-	//float sizeX = 10.0f;
-	//float sizeY = 10.0f;
-	//float3 gravity = make_float3(0.0, -10.0, 0.0);
-	//int startFrame = 1;
-	//int endFrame = 20;
-	//int substep = 4;
-	//int iteration = 10;
-	//HardwareType ht = GPU;
-	//SolverType st = GAUSSSEIDEL;
-	//float stiffnessSetting[1] = { 1.0f };
 
-	//PBDObject pbdObj(dampingRate, gravity, resX, resY, sizeX, sizeY, ht);
-	//pbdObj.SetConstrOption(DISTANCE | ANCHOR, stiffnessSetting);
-	//pbdObj.Init();
+	float dampingRate = 0.9f;
+	float3 gravity = make_float3(0.0, -10.0, 0.0);
+	int startFrame = 1;
+	int endFrame = 35;
+	int substep = 10;
+	int iteration = 10;
+	HardwareType ht = CPU;
+	SolverType st = GAUSSSEIDEL;
+	float stiffnessSetting[1] = { 1.0f };
 
-	//SolverPBD solver;
-	//solver.SetTarget(&pbdObj);
+	string topolFileName = "D://0310ContinuousCollisionDectection//ccdTestData//InitTopol.txt";
+	string distConstrFileName = "D://0310ContinuousCollisionDectection//ccdTestData//DistanceConstr.txt";
+
+	PBDObject pbdObj(dampingRate, gravity, ht);
+	pbdObj.SetConstrOption(DISTANCE, stiffnessSetting);
+	pbdObj.Init(topolFileName, distConstrFileName);
+
+	printf("primList:(%d) \n", pbdObj.meshTopol.primList.GetSize());
+	//printf("primList:(%d, %d) \n", pbdObj.meshTopol.primList.m_Data[0].x, pbdObj.meshTopol.primList.m_Data[0].y);
+
+	SolverPBD pbdSolver;
+	pbdSolver.SetTarget(&pbdObj);
+
+	float3 cellSize = make_float3(3.0f, 3.0f, 3.0f);
+	float3 gridCenter = make_float3(0.0f, 4.0f, 0.0f);
+	uint3 gridSize = make_uint3(5, 3, 5);
+
+	// initialize SH
+	SpatialHashSystem shs(pbdObj.meshTopol.posBuffer, pbdObj.meshTopol.indices, CPU);
+	shs.SetGridCenter(gridCenter);
+	shs.SetGridSize(gridSize);
+	shs.SetDivision(cellSize);
+	shs.InitSH();
+	shs.UpdateSH(0.0f);
+
+	CollisionSolver colliSolver;
+	colliSolver.SetTarget(&pbdObj);
+	colliSolver.SetThickness(0.03f);
+	//colliSolver.SetIterations(2);
+	colliSolver.SetAcceStruct(&shs);
 
 	//pbdObj.meshTopol.indices = pbdObj.constrPBDBuffer.topol.indices;
 	//pbdObj.meshTopol.primList = pbdObj.constrPBDBuffer.topol.primList;
 
-	////IO::SaveToplogy(pbdObj.meshTopol, "D:/GPUtopol.cache");
-	////cout << "topol saved" << endl;
-	////IO::SaveBuffer(pbdObj.constrPBDBuffer.color, "D:/GPUcolor.cache");
-	////cout << "color saved" << endl;
+	//IO::SaveToplogy(pbdObj.meshTopol, "D:/3SheetsofCloth.cache");
+	//cout << "topol saved" << endl;
+	//IO::SaveBuffer(pbdObj.constrPBDBuffer.color, "D:/GPUcolor.cache");
+	//cout << "color saved" << endl;
 
-	//int fps = 24;
-	//float dt = 1.0 / fps / (float)substep;
-	//////int frame = 0
-	////solver.Advect(dt);
-	////solver.ProjectConstraint(GAUSSSEIDEL, iteration);
-	////WritePointsToFile(pbdObj.constrPBDBuffer.prdPBuffer, 0);
+	int fps = 24;
+	float dt = 1.0 / fps / (float)substep;
 
-	//for (size_t i = startFrame; i < endFrame; i++)
-	//{
-	//	for (size_t s = 0; s < substep; s++)
-	//	{
-	//		solver.Advect(dt);
-	//		solver.ProjectConstraint(st, iteration);
-	//		solver.Integration(dt);
-	//	}
-	//	// WritePointsToFile(pbdObj.meshTopol.posBuffer, i);
-	//}
+	for (size_t i = startFrame; i <= endFrame; i++)
+	{
+		for (size_t s = 0; s < substep; s++)
+		{
+			pbdSolver.Advect(dt);
+			pbdSolver.ProjectConstraint(st, iteration);
+			colliSolver.CCD_SH(); 
+			for (int iteration = 0; iteration < 2; ++iteration)
+			{
+				shs.UpdateSH(dt);
+				colliSolver.CollisionResolve();
+				colliSolver.ColliWithShpGrd();
+			}
+			pbdSolver.Integration(dt);
+		}
+		//WritePointsToFile(pbdObj.constrPBDBuffer.prdPBuffer, i);
+		IO::SaveToplogy(pbdObj.meshTopol, "D://0310ContinuousCollisionDectection//0315Test//mG." + to_string(i) + ".cache");
+		cout << "topol saved" << endl;
+	}
 
 	//auto end = chrono::steady_clock::now();
 	//auto diff = end - start;

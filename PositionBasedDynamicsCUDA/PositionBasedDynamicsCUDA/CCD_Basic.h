@@ -35,10 +35,9 @@ public:
 	{
 
 	}
-	void SetTarget(Topology* topol, BufferVector3f* prdPBuffer)
+	void SetTarget(PBDObject* pbdObj)
 	{
-		this->m_topol = topol;
-		this->m_prdPBuffer = prdPBuffer;
+		this->m_pbdObj = pbdObj;
 	}
 	void SetAcceStruct(SpatialHashSystem* shs)
 	{
@@ -46,31 +45,48 @@ public:
 	}
 	void SetThickness(float thickness)
 	{
-		this->m_Thickness = thickness;
+		this->m_thickness = thickness;
+	}
+	void SetIterations(int iterations)
+	{
+		this->m_iterations;
+	}
+	BufferVector3f GetPrdPBuffer()
+	{
+		return this->m_pbdObj->constrPBDBuffer.prdPBuffer;
 	}
 	ContactData contactData;
 	void CCD_N2();
 	void CCD_SH();
 	void CollisionResolve(ContactData& ctxData);
 	void CollisionResolve();
+	void SaveResult();
+	void ColliWithShpGrd();
 
 private:
-	Topology* m_topol;
-	BufferVector3f* m_prdPBuffer;
+	PBDObject* m_pbdObj;
+	/*Topology m_topol;
+	BufferVector3f m_prdPBuffer;*/
 	SpatialHashSystem* m_shs;
-	float m_Thickness;
+	int m_iterations;
+	float m_thickness;
+	// for static sphere & ground collide
+	float3 m_sphereCenter = make_float3(0.0f, 1.0f, 0.0f);
+	float m_sphereRadius = 1.5f;
+	float m_groundHeight = 0.0f;
+
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
-		Contact ctx);
+		Contact ctx, int  i0, int i1, int i2, int i3);
 	bool VFTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
-		Contact& contact);
+		Contact& contact, int i0, int i1, int i2, int i3);
 	bool VFTestDCD(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
 		Contact& contact);
 	bool CCDCollisionTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
-		Contact::Type type, Contact& contact);
+		Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3);
 	void CollisionResolve(Contact& ctx);
 	double signed_vf_distance(const float3& x,
 		const float3& y0, const float3& y1, const float3& y2,
@@ -78,6 +94,10 @@ private:
 	double signed_ee_distance(const float3& x0, const float3& x1,
 		const float3& y0, const float3& y1,
 		float3* n, double* w);
+	bool CollisionSolver::CollideGround(float3 pointPos, float groundHeight);
+	bool CollisionSolver::ColliderSphere(float3 pointPos, float3 sphereOrigin, float r);
+	float3 CollisionSolver::GenerateMoveVectorSphere(float3 sphereOrigin, float sphereRadius, float3  p);
+
 };
 
 class CCDTest
