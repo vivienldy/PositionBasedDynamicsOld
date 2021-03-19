@@ -22,6 +22,15 @@
 
 using namespace std;
 
+#define __DEBUG 1
+
+#ifdef  __DEBUG
+	#define PBD_DEBUGTIME(t)  cout <<  __FUNCTION__ << "   " << t << "ms" << endl;
+	#define PBD_DEBUG  cout <<  __FUNCTION__  << endl;
+#else
+	#define PBD_DEBUG
+#endif //  __DEBUG
+
 #define KERNEL_FUNC __device__ __host__ 
 #define FORBIDBITS 64
 #define MAXFORBID 18446744073709551615ul
@@ -69,6 +78,7 @@ inline std::ofstream& operator<<(std::ofstream& ofs, int2& val)
 	return ofs;
 }
 
+
 struct P2P
 {
 	BufferInt indices;
@@ -80,16 +90,18 @@ struct Topology
 	BufferInt indices;
 	BufferVector3f posBuffer;
 	BufferInt2 primList;
+	void Save(std::ofstream& ofs);
 };
 
 struct ConstraintPBD
 {
 	Topology topol;
-	BufferFloat restLengthBuffer;  // determine the rest pos structure of constrs
+  // determine the rest pos structure of constrs
 	BufferVector3f prdPBuffer;
 	BufferVector3f restPosBuffer;
 	BufferVector3f restAngleBuffer;
 	//BufferFloat thickness;
+	BufferFloat restLengthBuffer;
 	BufferFloat stiffnessBuffer;
 	BufferInt constraintType;
 	HardwareType ht;  // inialized in PBDObject
@@ -126,11 +138,15 @@ struct ConstraintPBD
 	void EdgeColoringGPU(int iterations);
 	void SortEdgesColors();
 	void EvalWorksets();
+	void Save(std::ofstream& ofs);
 };
 
 class PBDObject
 {
 public:
+	PBDObject()
+	{
+	}
 	PBDObject(float dampingRate, float3 gravity, HardwareType ht) :
 		dampingRate(dampingRate), gravity(gravity), ht(ht)
 	{
@@ -148,9 +164,22 @@ public:
 
 	void Init();
 	void Init(string topolFileName, string distConstrFileName);
+	void ContinueSimInit(string meshTopolPath, string constrPath, HardwareType hardwareType);
 	void SetConstrOption(uint ct, float* stiffnessSetting);
+	void SetTimer(Timer* timer) { this->m_pbdObjTimer = timer; }
 
 	void InitGPUBuffers();
+	void Save(string path);
+	void Save(std::ofstream& ofs);
+	void SaveMeshTopol(string path);
+	void SaveConstraint(string path);
+	void Read(string path);
+	/// <summary>
+	/// file name: frame data
+	/// frame:0
+	/// funtion: acvect
+	/// header: 3 2 1
+	/// </summary>
 
 	Topology meshTopol;  // opengl will draw this topol
 	ConstraintPBD constrPBDBuffer;
@@ -165,6 +194,9 @@ public:
 	float* stiffnessSetting;  // [DISTANCE, BENDING, ANCHOR]
 
 private:
+	// Timer
+	Timer* m_pbdObjTimer;
+	//bool m_timerStatus;  // 1 - on; 0 - off
 	void initMeshTopol();
 	void initMassVel();
 	void initPosition(float2 cord);
@@ -196,8 +228,12 @@ public:
 	void Advect(float dt);
 	void ProjectConstraint(SolverType st, int iterations);
 	void Integration(float dt);
+	void SetTimer(Timer* timer) { this->m_pbdSolverTimer = timer; }
 
 private:
+	// Timer
+	Timer* m_pbdSolverTimer;
+	//bool m_timerStatus;  // 1 - on; 0 - off
 	PBDObject* m_pbdObj;
 	HardwareType m_ht;
 	void advectCPU(float dt);
@@ -225,6 +261,26 @@ namespace IO
 		buffer.Save(ofs);
 	}
 
+	template <typename T>
+	inline void SaveData(T& data, string name, std::ofstream& ofs)
+	{
+		if (!ofs)
+			return;
+		auto type = typeid(T).name();
+		ofs << name << "|";
+		ofs.write(type, strlen(type));
+		ofs << "|";
+		if (0 == strcmp(type, "float * __ptr64"))
+		{
+			ofs << endl;
+		}
+		else
+		{
+			ofs  << data << endl; 
+		}
+		//cout << "typeName: " << typeid(T).name() << endl;
+	}
+
 	inline void SaveToplogy(Topology top, std::string path)
 	{
 		std::ofstream ofs(path);
@@ -234,6 +290,9 @@ namespace IO
 		//{
 		//	printf("%d-", top.indices.m_Data[i]);
 		//}
+		top.indices.SetName("Indices");
+		top.posBuffer.SetName("P");
+		top.primList.SetName("primList");
 		SaveBuffer<int>(top.indices, ofs);
 		SaveBuffer<float3>(top.posBuffer, ofs);
 		SaveBuffer<int2>(top.primList, ofs);
@@ -269,7 +328,198 @@ namespace IO
 		return powf(powf((p1.x - p2.x), 2) + powf((p1.y - p2.y), 2) + powf((p1.z - p2.z), 2), 0.5);
 	}
 
-	inline bool ReadTopolFromTxt(string filename, PBDObject* pdbObj)
+	inline bool ReadTopolFromCache(string path, PBDObject* pbdObj)
+	{
+		std::fstream in;
+		in.open(path, std::ios::in);
+		if (!in.is_open()) 
+		{
+			printf("Error opening the file\n");
+			exit(1);
+		}
+
+		auto meshPosBuffer = &(pbdObj->meshTopol.posBuffer);
+		auto meshIndices = &(pbdObj->meshTopol.indices);
+		auto meshPrimList = &(pbdObj->meshTopol.primList);
+		auto massBuffer = &(pbdObj->massBuffer);
+		auto velBuffer = &(pbdObj->velBuffer);
+
+		bool m_loadSuccess = false;
+		std::vector<std::string> dataStringList;
+
+
+		std::string buffer;
+		while (std::getline(in, buffer))
+		{
+			std::vector<std::string> dataMean = splitString(buffer, "|");
+			if (dataMean.size() != 3)
+				continue;
+			std::string name = dataMean[0];
+			std::vector<std::string> dataBuffer = splitString(dataMean[2], ";");
+			if (name == "Indices")
+			{
+				for (int i = 0; i < dataBuffer.size(); i++)
+				{
+					meshIndices->m_Data.push_back(std::stoi(dataBuffer[i]));
+				}					
+			}
+			else if (name == "P")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					std::vector<std::string> data = splitString(dataBuffer[i], ",");
+					float3 vertexPos = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
+					meshPosBuffer->m_Data.push_back(vertexPos);
+				}				
+			}
+			else if (name == "primList")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					std::vector<std::string> data = splitString(dataBuffer[i], ",");
+					int2 prim = make_int2(std::stoi(data[0]), std::stoi(data[1]));
+					meshPrimList->m_Data.push_back(prim);
+				}
+			}
+			else if (name == "velBuffer")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					std::vector<std::string> data = splitString(dataBuffer[i], ",");
+					float3 velPos = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
+					velBuffer->m_Data.push_back(velPos);
+				}
+			}
+			else if (name == "massBuffer")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{		
+					massBuffer->m_Data.push_back(std::stof(dataBuffer[i]));
+				}
+			}
+			else if (name == "dampingRate")
+			{
+				pbdObj->dampingRate = std::stof(dataBuffer[0]);
+			}
+			else if (name == "gravity")
+			{
+				std::vector<std::string> data = splitString(dataBuffer[0], ",");
+				float3 g = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
+				pbdObj->gravity = g;
+			}
+		}	
+		in.close();
+		m_loadSuccess = true;
+		//printf("Read Topol File Done!\n");
+		return m_loadSuccess;
+	}
+
+	inline bool ReadConstraintFromCache(string path, PBDObject* pbdObj)
+	{
+		std::fstream in;
+		in.open(path, std::ios::in);
+		if (!in.is_open())
+		{
+			printf("Error opening the file\n");
+			exit(1);
+		}
+
+		auto constrPosBuffer = &(pbdObj->constrPBDBuffer.topol.posBuffer);
+		auto constrIndices = &(pbdObj->constrPBDBuffer.topol.indices);
+		auto constrPrimList = &(pbdObj->constrPBDBuffer.topol.primList);
+		auto constrPrdpBuffer = &(pbdObj->constrPBDBuffer.prdPBuffer);
+		//auto restPosBuffer = &(pbdObj->constrPBDBuffer.restPosBuffer); // now is empty
+		auto restLengthBuffer = &(pbdObj->constrPBDBuffer.restLengthBuffer);
+		auto stiffnessBuffer = &(pbdObj->constrPBDBuffer.stiffnessBuffer);
+		auto constraintType = &(pbdObj->constrPBDBuffer.constraintType);
+
+		bool m_loadSuccess = false;
+		std::vector<std::string> dataStringList;
+
+
+		std::string buffer;
+		while (std::getline(in, buffer))
+		{
+			std::vector<std::string> dataMean = splitString(buffer, "|");
+			if (dataMean.size() != 3)
+				continue;
+			std::string name = dataMean[0];
+			std::vector<std::string> dataBuffer = splitString(dataMean[2], ";");
+			if (name == "Indices")
+			{
+				for (int i = 0; i < dataBuffer.size(); i++)
+				{
+					constrIndices->m_Data.push_back(std::stoi(dataBuffer[i]));
+				}
+			}
+			else if (name == "P")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					std::vector<std::string> data = splitString(dataBuffer[i], ",");
+					float3 vertexPos = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
+					constrPosBuffer->m_Data.push_back(vertexPos);
+				}
+			}
+			else if (name == "primList")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					std::vector<std::string> data = splitString(dataBuffer[i], ",");
+					int2 prim = make_int2(std::stoi(data[0]), std::stoi(data[1]));
+					constrPrimList->m_Data.push_back(prim);
+				}
+			}
+			else if (name == "prdPBuffer")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					std::vector<std::string> data = splitString(dataBuffer[i], ",");
+					float3 prdP = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
+					constrPrdpBuffer->m_Data.push_back(prdP);
+				}
+			}
+			else if (name == "restPosBuffer")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					std::vector<std::string> data = splitString(dataBuffer[i], ",");
+					float3 restPos = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
+					constrPrdpBuffer->m_Data.push_back(restPos);
+				}
+			}
+			else if (name == "restLengthBuffer")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{					
+					float l = std::stof(dataBuffer[i]);
+					restLengthBuffer->m_Data.push_back(l);
+				}				
+			}
+			else if (name == "stiffnessBuffer")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					float s = std::stof(dataBuffer[i]);
+					stiffnessBuffer->m_Data.push_back(s);
+				}
+			}
+			else if (name == "constraintType")
+			{
+				for (int i = 0; i < dataBuffer.size(); ++i)
+				{
+					float c = std::stoi(dataBuffer[i]);
+					constraintType->m_Data.push_back(c);
+				}
+			}
+		}
+		in.close();
+		m_loadSuccess = true;
+		//printf("Read Topol File Done!\n");
+		return m_loadSuccess;
+	}
+
+	inline bool ReadTopolFromTxt(string filename, PBDObject* pbdObj)
 	{
 		//printf("Read Topol From Txt\n");
 		std::fstream in;
@@ -282,11 +532,11 @@ namespace IO
 		bool m_loadSuccess = false;
 		std::vector<std::string> dataStringList;
 
-		auto meshPosBuffer = &(pdbObj->meshTopol.posBuffer);
-		auto meshIndices = &(pdbObj->meshTopol.indices);
-		auto meshPrimList = &(pdbObj->meshTopol.primList);
-		auto massBuffer = &(pdbObj->massBuffer);
-		auto velBuffer = &(pdbObj->velBuffer);
+		auto meshPosBuffer = &(pbdObj->meshTopol.posBuffer);
+		auto meshIndices = &(pbdObj->meshTopol.indices);
+		auto meshPrimList = &(pbdObj->meshTopol.primList);
+		auto massBuffer = &(pbdObj->massBuffer);
+		auto velBuffer = &(pbdObj->velBuffer);
 
 		meshIndices->SetName("Indices");
 		meshPosBuffer->SetName("P");

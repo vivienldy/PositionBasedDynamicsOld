@@ -4,6 +4,7 @@ SpatialHashSystem::SpatialHashSystem(string filename, uint3 gridSize, HardwareTy
 	m_gridSize(gridSize),
 	m_ht(ht)
 {
+	PBD_DEBUG;
 	// init m_numTriangles, m_loadSuccess, m_hPosBuffer, m_hTriIdxBuffer
 	//readMeshFromTxt(filename);
 	//assert(m_loadSuccess);
@@ -69,12 +70,14 @@ void SpatialHashSystem::SetDivision(float3 cellSize)
 
 void SpatialHashSystem::InitSH()
 {
+	PBD_DEBUG;
 	float shiftX = (m_gridSize.x * m_cellSize.x) / 2;
 	float shiftY = (m_gridSize.y * m_cellSize.y) / 2;
 	float shiftZ = (m_gridSize.z * m_cellSize.z) / 2;
 	m_girdStartPos = m_worldOrigin - make_float3(shiftX, shiftY, shiftZ);
 	//printf("grid start pos is %f, %f, %f\n", m_girdStartPos.x, m_girdStartPos.y, m_girdStartPos.z);
 	m_initialized = true;
+	UpdateSH(m_hPosBuffer);
 }
 
 /*
@@ -148,12 +151,16 @@ SpatialHashSystem::SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxB
 }
 */
 
-void SpatialHashSystem::UpdateSH(float dt)
+
+void SpatialHashSystem::UpdateSH(BufferVector3f& prdPBuffer)
 {
+	m_shsTimer->Tick();
 	assert(m_initialized);
 	switch (m_ht)
 	{
 	case CPU:
+		m_hPosBuffer = prdPBuffer;
+		evalTriCentroids();
 		calcHashCPU();
 		sortTrianglesCPU();
 		findCellStartCPU();
@@ -163,7 +170,10 @@ void SpatialHashSystem::UpdateSH(float dt)
 	default:
 		break;
 	}
+	m_shsTimer->Tock();
+	PBD_DEBUGTIME(m_shsTimer->GetFuncTime());
 }
+
 
 bool SpatialHashSystem::outsideGrid(int3 gridPos)
 {
@@ -182,8 +192,8 @@ void SpatialHashSystem::FindNeighbors(BufferInt& neighbors,  // output: a list o
 	// get address in grid
 	int3 gridPos = calcGridPosCPU(targetTriCentroid);
 	// printf("\t gridPos: %d %d %d\n", gridPos.x, gridPos.y, gridPos.z);
-	uint cellStart;
-	uint cellEnd;
+	int cellStart;
+	int cellEnd;
 	for (int z = -1; z <= 1; z++)
 	{
 		for (int y = -1; y <= 1; y++)
@@ -202,7 +212,7 @@ void SpatialHashSystem::FindNeighbors(BufferInt& neighbors,  // output: a list o
 					//printf("\t hashId: %d\n", hashId);
 					cellEnd = m_hCellEnd.m_Data[hashId];
 					// cell range of a hash: [cellStart, cellEnd]
-					for (uint i = cellStart; i <= cellEnd; ++i)
+					for (int i = cellStart; i <= cellEnd; ++i)
 					{
 						uint neighborId = m_hTriangleId.m_Data[i];
 						if (neighborId != targetTriID)

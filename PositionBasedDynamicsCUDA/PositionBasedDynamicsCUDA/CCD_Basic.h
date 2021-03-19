@@ -5,6 +5,8 @@
 #include"PBD_Basic.cuh"
 #include "SpatialHashSystem.h"
 
+#define __ISDUPLICATE 0
+
 struct Contact
 {
 	enum Type { VF, EE, VFDCD } type;
@@ -22,6 +24,7 @@ struct ContactData
 	BufferInt ctxIndices; // vector<Node*> nodes;
 	BufferInt2 ctxStartNum;
 	//bool active;
+	void Save(std::ofstream& ofs);
 };
 
 class CollisionSolver
@@ -39,6 +42,11 @@ public:
 	{
 		this->m_pbdObj = pbdObj;
 	}
+	void SetTargetTest(Topology& topol, BufferVector3f prdPBuffer)
+	{
+		this->m_topol = topol;
+		this->m_prdPBuffer = prdPBuffer;
+	}
 	void SetAcceStruct(SpatialHashSystem* shs)
 	{
 		this->m_shs = shs;
@@ -49,7 +57,7 @@ public:
 	}
 	void SetIterations(int iterations)
 	{
-		this->m_iterations;
+		this->m_iterations = iterations;
 	}
 	BufferVector3f GetPrdPBuffer()
 	{
@@ -62,17 +70,35 @@ public:
 	void CollisionResolve();
 	void SaveResult();
 	void ColliWithShpGrd();
+	void CollisionSolver::CCD_N2Test();
+	void CollisionSolver::CollisionResolveTest();
+	void SetTimer(Timer* timer) { this->m_ccdSolverTimer = timer; }
+	void SaveCollision(string path); // for collision debugging
+
+		// for collision debuggin
+	BufferVector3f m_beforeColliPrdPBuffer;
+	BufferVector3f m_afterColliPrdPBuffer;
+	BufferInt m_nContact;
+	BufferInt2 m_resolveTimes;
+	std::map<int, BufferFloat> m_resolveDepths;
+	int m_debugFrameID;
 
 private:
 	PBDObject* m_pbdObj;
-	/*Topology m_topol;
-	BufferVector3f m_prdPBuffer;*/
+	// Timer
+	Timer* m_ccdSolverTimer;
+	//bool m_timerStatus;  // 1 - on; 0 - off
+
+	// for ccd testing
+	Topology m_topol;
+	BufferVector3f m_prdPBuffer;
+
 	SpatialHashSystem* m_shs;
 	int m_iterations;
 	float m_thickness;
 	// for static sphere & ground collide
 	float3 m_sphereCenter = make_float3(0.0f, 1.0f, 0.0f);
-	float m_sphereRadius = 1.5f;
+	float m_sphereRadius = 1.0f;
 	float m_groundHeight = 0.0f;
 
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
@@ -97,6 +123,7 @@ private:
 	bool CollisionSolver::CollideGround(float3 pointPos, float groundHeight);
 	bool CollisionSolver::ColliderSphere(float3 pointPos, float3 sphereOrigin, float r);
 	float3 CollisionSolver::GenerateMoveVectorSphere(float3 sphereOrigin, float sphereRadius, float3  p);
+	
 
 };
 

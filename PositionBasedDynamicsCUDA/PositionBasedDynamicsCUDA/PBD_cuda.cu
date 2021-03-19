@@ -57,7 +57,6 @@ void ConstraintPBD::InitDistanceInfo(BufferVector3f& meshPosBuffer, float stiffn
 {
 	//
 	// constraint allocation 
-	//	�ʵ�+����ϵͳ
 	// 
 	int count = 2;
 	int prims = topol.indices.GetSize() / count;
@@ -625,6 +624,20 @@ void ConstraintPBD::EvalWorksets()
 	printf("\n");*/
 }
 
+void ConstraintPBD::Save(std::ofstream& ofs)
+{
+	topol.Save(ofs);
+	prdPBuffer.SetName("prdPBuffer");
+	IO::SaveBuffer(prdPBuffer, ofs);
+	restPosBuffer.SetName("restPosBuffer"); // empty now, initial in initPosition which is not used in read data from houdini
+	IO::SaveBuffer(restPosBuffer, ofs);
+	restLengthBuffer.SetName("restLengthBuffer");
+	IO::SaveBuffer(restLengthBuffer, ofs);
+	stiffnessBuffer.SetName("stiffnessBuffer");
+	IO::SaveBuffer(stiffnessBuffer, ofs);
+	constraintType.SetName("constraintType");
+	IO::SaveBuffer(constraintType, ofs);
+}
 
 // ----------------------------------------------------------------------------------------
 // PBDObject class
@@ -640,6 +653,15 @@ void PBDObject::Init(string topolFileName, string distConstrFileName)
 		printf("PBD Object was initialized successfully\n");*/
 	bool readTopol = IO::ReadTopolFromTxt(topolFileName, this);
 	bool readConstr = IO::ReadDistConstrFromTxt(distConstrFileName, this);
+	if (readTopol && readConstr)
+		printf("PBD Object was initialized successfully\n");
+}
+
+void PBDObject::ContinueSimInit(string meshTopolPath, string constrPath, HardwareType hardwareType)
+{
+	ht = hardwareType;
+	bool readTopol = IO::ReadTopolFromCache(meshTopolPath, this);
+	bool readConstr = IO::ReadConstraintFromCache(constrPath, this);
 	if (readTopol && readConstr)
 		printf("PBD Object was initialized successfully\n");
 }
@@ -858,7 +880,68 @@ void PBDObject::groundTruthTest()
 	constrPBDBuffer.prdColor.m_Data = arr3;
 }
 
+void PBDObject::Save(string path)
+{
+	PBD_DEBUG;
+	std::ofstream ofs(path);
+	if (!ofs.is_open())
+		return;
 
+	ofs << "Header|float3Buffer,6;floatBuffer,2;int2Buffer,2;intBuffer,3;float3,1;float,1" << endl; //HEADER
+	meshTopol.indices.SetName("meshTopol indices");
+	meshTopol.posBuffer.SetName("meshTopol posBuffer");
+	meshTopol.primList.SetName("meshTopol primList");
+	meshTopol.Save(ofs);
+	constrPBDBuffer.Save(ofs);
+	velBuffer.SetName("velBuffer");
+	IO::SaveBuffer(velBuffer, ofs);
+	massBuffer.SetName("massBuffer");
+	IO::SaveBuffer(massBuffer, ofs);
+	IO::SaveData(dampingRate, "dampingRate", ofs);
+	IO::SaveData(gravity, "gravity", ofs);
+
+	ofs.flush();
+	ofs.close();
+}
+
+void PBDObject::SaveMeshTopol(string path)
+{
+	PBD_DEBUG;
+	std::ofstream ofs(path);
+	if (!ofs.is_open())
+		return;
+
+	//ofs << "Header|float3Buffer,3;int2Buffer,1;intBuffer,1;float3,1;float,1" << endl; //HEADER
+	meshTopol.Save(ofs);
+	velBuffer.SetName("velBuffer");
+	IO::SaveBuffer(velBuffer, ofs);
+	massBuffer.SetName("massBuffer");
+	IO::SaveBuffer(massBuffer, ofs);
+	IO::SaveData(dampingRate, "dampingRate", ofs);
+	IO::SaveData(gravity, "gravity", ofs);
+
+	ofs.flush();
+	ofs.close();
+}
+
+void PBDObject::SaveConstraint(string path)
+{
+	PBD_DEBUG;
+	std::ofstream ofs(path);
+	if (!ofs.is_open())
+		return;
+
+	//ofs << "Header|float3Buffer,3;floatBuffer,2;int2Buffer,1;intBuffer,2" << endl; //HEADER
+	constrPBDBuffer.Save(ofs);
+
+	ofs.flush();
+	ofs.close();
+}
+
+void PBDObject::Read(string path)
+{
+
+}
 // ----------------------------------------------------------------------------------------
 // SolverPBD class
 
@@ -897,6 +980,7 @@ void __global__ AdvectGPUKernel(
 
 void SolverPBD::Advect(float dt)
 {
+	PBD_DEBUG;
 	switch (m_ht)    // TODO: change back to ht
 	{
 	case CPU:
@@ -977,6 +1061,7 @@ void SolverPBD::advectGPU(float dt)
 
 void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 {
+	m_pbdSolverTimer->Tick();
 	switch (m_ht)    // TODO: change back to ht
 	{
 	case CPU:
@@ -988,6 +1073,8 @@ void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 	default:
 		break;
 	}
+	m_pbdSolverTimer->Tock();
+	PBD_DEBUGTIME(m_pbdSolverTimer->GetFuncTime());
 }
 
 void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
@@ -1265,6 +1352,7 @@ void SolverPBD::projectConstraintGPU(SolverType st, int iterations)
 
 void SolverPBD::Integration(float dt)
 {
+	PBD_DEBUG;
 	switch (m_ht)    // TODO: change back to ht
 	{
 	case CPU:
@@ -1342,4 +1430,12 @@ void SolverPBD::integrationGPU(float dt)
 		//	positionBuffer->m_Data[0].x, positionBuffer->m_Data[0].y, positionBuffer->m_Data[0].z,
 		//	positionBuffer->m_Data[pbdObj->resY - 1].x, positionBuffer->m_Data[pbdObj->resY - 1].y,
 		//	positionBuffer->m_Data[pbdObj->resY - 1].z);
+}
+
+// ------------------Topology---------------------
+void Topology::Save(std::ofstream& ofs)
+{
+	IO::SaveBuffer(indices, ofs);
+	IO::SaveBuffer(posBuffer, ofs);
+	IO::SaveBuffer(primList, ofs);
 }

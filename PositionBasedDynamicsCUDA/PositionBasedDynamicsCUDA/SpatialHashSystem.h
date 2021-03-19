@@ -17,10 +17,11 @@ public:
 	void SetGridSize(uint3 gridSize);
 	void SetDivision(float3 cellSize);  // change voxel size / cell size 
 	void InitSH();
-	void UpdateSH(float dt);  // reserved for dynamic update for accelerating PBD collision detection
+	void UpdateSH(BufferVector3f& prdPBuffer);  // reserved for dynamic update for accelerating PBD collision detection
 	void FindNeighbors(BufferInt& neighbors,  // output: a list of triangle IDs (int)
 		uint targetTriID);   // input: a triangle ID 
-// Test Method
+	void SetTimer(Timer* timer) { this->m_shsTimer = timer; }
+	// Test Method
 	void SetTargetTriId(uint targetId) { m_targetId = targetId; }
 
 protected: // functions
@@ -91,7 +92,9 @@ protected: // data
 	// Test var
 	uint m_targetId;
 
+	// Timer 
+	Timer* m_shsTimer;
+	// bool m_timerStatus;  // 1 - on; 0 - off
 };
 
 #endif
-
