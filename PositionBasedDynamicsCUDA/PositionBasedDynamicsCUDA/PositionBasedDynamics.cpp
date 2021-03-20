@@ -33,14 +33,14 @@ void ContinueSim()
 {
 	HardwareType ht = CPU;
 	PBDObject pbdObj;
-	pbdObj.ContinueSimInit("D://0310ContinuousCollisionDectection//ContinuousSimData//meshTopol//5meshTopol.40.cache",
-										   "D://0310ContinuousCollisionDectection//ContinuousSimData//constraint//5constraint.40.cache", ht);
+	pbdObj.ContinueSimInit("D://0319CCDTest//continueSimData//meshTopol//NewLargeClothMeshTopol.19.cache",
+										   "D://0319CCDTest//continueSimData//constraint//NewLargeClothConstraint.19.cache", ht);
 
 	Timer timers[nModules];
 	int startFrame = 1;
 	int endFrame = 50;
-	int substep = 10;
-	int iteration = 10;
+	int substep = 1;
+	int iteration = 75;
 	
 	SolverType st = GAUSSSEIDEL;
 	pbdObj.SetTimer(&timers[pbdObjTimer]);
@@ -54,9 +54,15 @@ void ContinueSim()
 	//float3 gridCenter = make_float3(0.0f, 4.0f, 0.0f);
 	//uint3 gridSize = make_uint3(6, 4, 6);
 
-	float3 cellSize = make_float3(0.5f, 0.5f, 0.5f);
-	float3 gridCenter = make_float3(0.0f, 4.0f, 0.0f);
-	uint3 gridSize = make_uint3(30, 10, 30);
+	//float3 cellSize = make_float3(0.5f, 0.5f, 0.5f);
+	//float3 gridCenter = make_float3(0.0f, 4.0f, 0.0f);
+	//int3 gridSize = make_int3(30, 10, 30);
+
+	// 1 large cloth with sphere
+	float3 cellSize = make_float3(0.35f, 0.35f, 0.35f);
+	float3 gridCenter = make_float3(0.0f, -3.0f, 0.0f);
+	uint3 gridSize = make_uint3(32, 23, 32);
+
 
 	// initialize SH
 	SpatialHashSystem shs(pbdObj.constrPBDBuffer.prdPBuffer, pbdObj.meshTopol.indices, CPU);
@@ -69,10 +75,11 @@ void ContinueSim()
 	CollisionSolver colliSolver;
 	colliSolver.SetTarget(&pbdObj);
 	colliSolver.SetThickness(0.03f);
-	colliSolver.SetIterations(2);
+	colliSolver.SetIterations(7);
 	colliSolver.SetAcceStruct(&shs);
 	colliSolver.SetTimer(&timers[colliSolverTimer]);
 
+	int colPasses = 5;
 	// for collision debugging
 	for (int i = 0; i < pbdObj.meshTopol.posBuffer.GetSize(); ++i)
 	{
@@ -91,23 +98,23 @@ void ContinueSim()
 		{
 			pbdSolver.Advect(dt);
 			pbdSolver.ProjectConstraint(st, iteration);
-			colliSolver.ColliWithShpGrd();
-			colliSolver.CCD_SH();
-			//// print contact vf points
-			//for (int i = 0; i < colliSolver.contactData.ctxIndices.GetSize()-4; i = i+4)
-			//{
-			//	printf("%d, %d, %d, %d\n", colliSolver.contactData.ctxIndices.m_Data[i], colliSolver.contactData.ctxIndices.m_Data[i + 1],
-			//		colliSolver.contactData.ctxIndices.m_Data[i + 2], colliSolver.contactData.ctxIndices.m_Data[i + 3]);
-			//}
-			colliSolver.CollisionResolve();
+			for (int col = 0; col < colPasses; col++)
+			{
+				colliSolver.CCD_SH();
+				colliSolver.CollisionResolve();
+			}
+			printf("------------------------------------frame: %d-------------------------------", i);
+			printf("after prdp: (%f, %f, %f)\n",
+					  colliSolver.m_afterColliPrdPBuffer.m_Data[3806].x, colliSolver.m_afterColliPrdPBuffer.m_Data[3806].y, colliSolver.m_afterColliPrdPBuffer.m_Data[3806].z);
 			pbdSolver.Integration(dt);
-			IO::SaveToplogy(pbdObj.meshTopol, "D://0310ContinuousCollisionDectection//ContinuousSimData//5contiCcdTestLow." + to_string((i - 1) * 10 + s + 1) + ".cache");
+			IO::SaveToplogy(pbdObj.meshTopol, "D://0319CCDTest//continueSimData//NewcontiSimData." + to_string((i - 1) * 10 + s + 1) + ".cache");
 			cout << "topol saved" << endl;
 			if (0)
 			{
+				
 				for (int i = 0; i < colliSolver.m_resolveTimes.GetSize(); ++i)
 				{
-					if (i == 211 /*|| i == 356 || i == 387 || i == 985 || i == 1286*/)
+					if (i == 3086 /*|| i == 356 || i == 387 || i == 985 || i == 1286*/)
 					{
 						printf("before prdp: (%f, %f, %f)\n",
 							colliSolver.m_beforeColliPrdPBuffer.m_Data[i].x, colliSolver.m_beforeColliPrdPBuffer.m_Data[i].y, colliSolver.m_beforeColliPrdPBuffer.m_Data[i].z);
@@ -143,15 +150,15 @@ int main()
 	ContinueSim();
 
 
-	/*
+/*
 	//CCDTestMain();
 	Timer timers[nModules];
 	float dampingRate = 0.9f;
 	float3 gravity = make_float3(0.0, -10.0, 0.0);
 	int startFrame = 1;
 	int endFrame = 50;
-	int substep = 10;
-	int iteration = 10;
+	int substep = 1;
+	int iteration = 705;
 	HardwareType ht = CPU;
 	SolverType st = GAUSSSEIDEL;
 	float stiffnessSetting[1] = { 1.0f };
@@ -159,8 +166,11 @@ int main()
 	//string topolFileName = "D://0310ContinuousCollisionDectection//ccdTestData//InitTopolLowHard.txt";
 	//string distConstrFileName = "D://0310ContinuousCollisionDectection//ccdTestData//DistanceConstrLowHard.txt";
 
-	string topolFileName = "D://0310ContinuousCollisionDectection//ccdTestData//5SheetsInitTopol.txt";
-	string distConstrFileName = "D://0310ContinuousCollisionDectection//ccdTestData//5SheetsDistanceConstr.txt";
+	//string topolFileName = "D://0310ContinuousCollisionDectection//ccdTestData//5SheetsInitTopol.txt";
+	//string distConstrFileName = "D://0310ContinuousCollisionDectection//ccdTestData//5SheetsDistanceConstr.txt";
+
+	string topolFileName = "D://0319CCDTest//1ClothWithSphereTopol.txt";
+	string distConstrFileName = "D://0319CCDTest//1ClothWithSphereConstr.txt";
 
 	PBDObject pbdObj(dampingRate, gravity, ht);
 	pbdObj.SetConstrOption(DISTANCE, stiffnessSetting);
@@ -172,14 +182,19 @@ int main()
 	pbdSolver.SetTarget(&pbdObj);
 	pbdSolver.SetTimer(&timers[pbdSolverTimer]);
 
-	
+	// three cloth with sphere
 	//float3 cellSize = make_float3(2.5f, 2.5f, 2.5f);
 	//float3 gridCenter = make_float3(0.0f, 4.0f, 0.0f);
-	//uint3 gridSize = make_uint3(6, 4, 6);
-
-	float3 cellSize = make_float3(0.5f, 0.5f, 0.5f);
-	float3 gridCenter = make_float3(0.0f, 4.0f, 0.0f);
-	uint3 gridSize = make_uint3(30, 10, 30);
+	//float3 gridCenter = make_float3(0.0f, -1.0f, 0.0f);
+	//int3 gridSize = make_int3(6, 4, 6);
+	// 5 cloth with sphere
+	//float3 cellSize = make_float3(0.5f, 0.5f, 0.5f);
+	//float3 gridCenter = make_float3(0.0f, 4.0f, 0.0f);
+	//int3 gridSize = make_int3(30, 10, 30);
+	// 1 large cloth with sphere
+	float3 cellSize = make_float3(0.35f, 0.35f, 0.35f);
+	float3 gridCenter = make_float3(0.0f, -3.0f, 0.0f);
+	uint3 gridSize = make_uint3(32, 23, 32);
 
 	// initialize SH
 	SpatialHashSystem shs(pbdObj.constrPBDBuffer.prdPBuffer, pbdObj.meshTopol.indices, CPU);
@@ -192,7 +207,7 @@ int main()
 	CollisionSolver colliSolver;
 	colliSolver.SetTarget(&pbdObj);
 	colliSolver.SetThickness(0.03f);
-	colliSolver.SetIterations(2);
+	colliSolver.SetIterations(7);
 	colliSolver.SetAcceStruct(&shs);
 	colliSolver.SetTimer(&timers[colliSolverTimer]);
 
@@ -207,9 +222,10 @@ int main()
 	int fps = 24;
 	float dt = 1.0 / fps / (float)substep;
 
-	string meshPath = "D://0310ContinuousCollisionDectection//ContinuousSimData//meshTopol//5meshTopol.";
-	string constrPath = "D://0310ContinuousCollisionDectection//ContinuousSimData//constraint//5constraint.";
-	string collisionPath = "D://0310ContinuousCollisionDectection//ContinuousSimData//collision//5collision.";
+	string meshPath = "D://0319CCDTest//continueSimData//meshTopol//NewLargeClothMeshTopol.";
+	string constrPath = "D://0319CCDTest//continueSimData//constraint//NewLargeClothConstraint.";
+	string collisionPath = "D://0319CCDTest//continueSimData//collision//NewLargeClothCollision.";
+	int colPasses = 5;
 	for (size_t i = startFrame; i <= endFrame; i++)
 	{
 		timers[globalTimer].Tick();  // global timer
@@ -217,18 +233,24 @@ int main()
 		{
 			pbdSolver.Advect(dt);
 			pbdSolver.ProjectConstraint(st, iteration);
-			colliSolver.ColliWithShpGrd();
-			colliSolver.CCD_SH(); 
-			colliSolver.CollisionResolve();
+			for (int col = 0; col < colPasses; col++)
+			{
+				colliSolver.CCD_SH();
+				colliSolver.CollisionResolve();
+			}
+			//colliSolver.CCD_SH(); 
+			//colliSolver.CCD_N2();
+			//colliSolver.CollisionResolve();
 			pbdSolver.Integration(dt);
-			string path = to_string((i-1) * 10 + s + 1) + ".cache";
-			//pbdObj.Save(path);
+			string path = to_string((i-1) * substep + s + 1) + ".cache";
 			pbdObj.SaveMeshTopol(meshPath + path);
 			pbdObj.SaveConstraint(constrPath + path);
 			colliSolver.SaveCollision(collisionPath + path);
-			IO::SaveToplogy(pbdObj.meshTopol, "D://0310ContinuousCollisionDectection//ContinuousSimData//5ccdTestLow." + to_string((i-1)*10 + s +1)  + ".cache");
-			cout << "topol saved" << endl;
+			//IO::SaveToplogy(pbdObj.meshTopol, "D://0310ContinuousCollisionDectection//ContinuousSimData//5ccdTestLow." + to_string((i-1)*10 + s +1)  + ".cache");
+			//cout << "topol saved" << endl;
 		}
+		IO::SaveToplogy(pbdObj.meshTopol, "D://0319CCDTest//1largeClothOutput//NewLargeClothWithSphere." + to_string(i) + ".cache");
+		cout << "topol saved" << endl;
 		timers[globalTimer].Tock();  // global timer
 		PBD_DEBUGTIME(timers[globalTimer].GetFuncTime());
 		//WritePointsToFile(pbdObj.constrPBDBuffer.prdPBuffer, i);	

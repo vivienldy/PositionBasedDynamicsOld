@@ -69,7 +69,6 @@ public:
 	void CollisionResolve(ContactData& ctxData);
 	void CollisionResolve();
 	void SaveResult();
-	void ColliWithShpGrd();
 	void CollisionSolver::CCD_N2Test();
 	void CollisionSolver::CollisionResolveTest();
 	void SetTimer(Timer* timer) { this->m_ccdSolverTimer = timer; }
@@ -97,9 +96,6 @@ private:
 	int m_iterations;
 	float m_thickness;
 	// for static sphere & ground collide
-	float3 m_sphereCenter = make_float3(0.0f, 1.0f, 0.0f);
-	float m_sphereRadius = 1.0f;
-	float m_groundHeight = 0.0f;
 
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
@@ -120,9 +116,6 @@ private:
 	double signed_ee_distance(const float3& x0, const float3& x1,
 		const float3& y0, const float3& y1,
 		float3* n, double* w);
-	bool CollisionSolver::CollideGround(float3 pointPos, float groundHeight);
-	bool CollisionSolver::ColliderSphere(float3 pointPos, float3 sphereOrigin, float r);
-	float3 CollisionSolver::GenerateMoveVectorSphere(float3 sphereOrigin, float sphereRadius, float3  p);
 	
 
 };

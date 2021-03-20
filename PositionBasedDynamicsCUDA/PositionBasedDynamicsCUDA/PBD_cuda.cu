@@ -1007,13 +1007,15 @@ void SolverPBD::advectCPU(float dt)
 		velBuffer->m_Data[i] += m_pbdObj->gravity * dt;
 		/*if(i == 30)
 			printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
-		velBuffer->m_Data[i] *= powf(m_pbdObj->dampingRate, dt);
+		//velBuffer->m_Data[i] *= powf(m_pbdObj->dampingRate, dt);
 
 		prdPBuffer->m_Data[i] = positionBuffer->m_Data[i] + velBuffer->m_Data[i] * dt;
 
 		//printf("postion Buffer: %f, %f, %f \n", prdPBuffer.m_Data[j].x, prdPBuffer.m_Data[j].y, prdPBuffer.m_Data[j].z);
 
 	}
+	//std::cout << "Distance: "<<__FUNCTION__ << Distance(prdPBuffer->m_Data[985], prdPBuffer->m_Data[1286]) << std::endl;
+
 }
 
 void SolverPBD::advectGPU(float dt)
@@ -1093,6 +1095,7 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
 	for (size_t ii = 0; ii < iterations; ii++)
 	{
+		//std::cout << "ii:" << ii << std::endl;
 		for (size_t i = 0; i < primList->GetSize(); i++)
 		{
 			if (primList->m_Data[i].y != 2)
@@ -1102,20 +1105,23 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 			float3 dp1;
 			float3 dp2;
 			float d = Distance(prdPBuffer->m_Data[i0], prdPBuffer->m_Data[i1]);
-			float3 v;
-			v = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
-			dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
-			dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
-			dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
-			dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.x / d;
-			dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.y / d;
-			dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * v.z / d;
-			float k = 1 - powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
+			float3 r = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
+			r = normalize(r);
+
+			dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) *r.x ;
+			dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) *r.y ;
+			dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) *r.z ;
+			dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i])  *r.x ;
+			dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i])  *r.y ;
+			dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i])  *r.z ;
+			float k = 1;// -powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
 			dp1 *= k;
 			dp2 *= k;
 			prdPBuffer->m_Data[i0] += dp1;
 			prdPBuffer->m_Data[i1] += dp2;
 		}
+
+		ColliWithShpGrd();
 
 		// Attach Points
 		//for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
@@ -1376,7 +1382,10 @@ void SolverPBD::integrationCPU(float dt)
 	{
 		velBuffer->m_Data[i] = (prdPBuffer->m_Data[i] - positionBuffer->m_Data[i]) / dt;
 		positionBuffer->m_Data[i] = prdPBuffer->m_Data[i];
+
 	}
+	//std::cout << "Distance:" << Distance(prdPBuffer->m_Data[985], prdPBuffer->m_Data[1286]) << std::endl;
+	//std::cout << "positionBuffer:" << Distance(positionBuffer->m_Data[985], positionBuffer->m_Data[1286]) << std::endl;
 }
 
 void __global__ IntegrationGPUKernel(
@@ -1431,7 +1440,61 @@ void SolverPBD::integrationGPU(float dt)
 		//	positionBuffer->m_Data[pbdObj->resY - 1].x, positionBuffer->m_Data[pbdObj->resY - 1].y,
 		//	positionBuffer->m_Data[pbdObj->resY - 1].z);
 }
+void SolverPBD::ColliWithShpGrd()
+{
+	auto posBuffer = &(m_pbdObj->meshTopol.posBuffer);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	for (int vtxId = 0; vtxId < posBuffer->GetSize(); ++vtxId)
+	{
+		//point collide with sphere
+		bool isCollideSphere = ColliderSphere(prdPBuffer->m_Data[vtxId], m_sphereCenter, m_sphereRadius);
+		if (isCollideSphere) //move the point to the point which intersect with sphere
+		{
+			float3 moveVector = GenerateMoveVectorSphere(m_sphereCenter, m_sphereRadius, prdPBuffer->m_Data[vtxId]);
+			prdPBuffer->m_Data[vtxId] += moveVector;
+		}
+		//point collide with ground
+		//bool isCollideGoround = CollideGround(prdPBuffer->m_Data[vtxId], m_groundHeight);
+		//if (isCollideGoround)
+		//{
+		//	prdPBuffer->m_Data[vtxId].y = m_groundHeight;
+		//}
+	}
 
+}
+
+bool SolverPBD::ColliderSphere(float3 pointPos, float3 sphereOrigin, float r)
+{
+	float d = Distance(pointPos, sphereOrigin);
+	if (d - r > 0.001)
+	{
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+}
+
+bool SolverPBD::CollideGround(float3 pointPos, float groundHeight)
+{
+	if (pointPos.y - groundHeight < 0.001)
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+float3 SolverPBD::GenerateMoveVectorSphere(float3 sphereOrigin, float sphereRadius, float3  p)
+{
+	float moveDistance = sphereRadius - Distance(sphereOrigin, p);
+	float3 moveDirection = (p - sphereOrigin) / Distance(sphereOrigin, p);
+	float3 moveLength = moveDirection * moveDistance;
+	return moveLength;
+}
 // ------------------Topology---------------------
 void Topology::Save(std::ofstream& ofs)
 {

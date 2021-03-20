@@ -236,12 +236,22 @@ private:
 	//bool m_timerStatus;  // 1 - on; 0 - off
 	PBDObject* m_pbdObj;
 	HardwareType m_ht;
+
+	float3 m_sphereCenter = make_float3(0.0f, 0.0f, 0.0f);
+	float m_sphereRadius = 1.0f;
+	float m_groundHeight = 0.0f;
+
 	void advectCPU(float dt);
 	void advectGPU(float dt);
 	void projectConstraintCPU(SolverType st, int iterations);
 	void projectConstraintGPU(SolverType st, int iterations);
 	void integrationCPU(float dt);
 	void integrationGPU(float dt);
+	void ColliWithShpGrd();
+	bool ColliderSphere(float3 pointPos, float3 sphereOrigin, float r);
+	bool CollideGround(float3 pointPos, float groundHeight);
+	float3 GenerateMoveVectorSphere(float3 sphereOrigin, float sphereRadius, float3  p);
+
 };
 
 namespace IO

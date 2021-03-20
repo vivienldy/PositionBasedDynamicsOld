@@ -375,7 +375,7 @@ void CollisionSolver::CollisionResolve()
 {
 	m_ccdSolverTimer->Tick();
 	m_beforeColliPrdPBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer; // for collision debugging
-	for (int i = 0; i < m_iterations; ++i)
+	for (int i = 0; i < 2; ++i)
 	{
 		//m_shs->UpdateSH(m_pbdObj->constrPBDBuffer.prdPBuffer);
 		Contact contact;
@@ -405,19 +405,14 @@ void CollisionSolver::CollisionResolve()
 				bool fRelatedPos = IsSameSide(vtxPos, p1Pos, n);
 				float3 nn = normalize(cross(m_prdPBuffer->m_Data[i2] - m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i3] - m_prdPBuffer->m_Data[i1]));
 				bool cRelatedPos = IsSameSide(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], nn);
-				/*
-				if (i0 == 211 || i1 == 211 || i2 == 211 || i3 == 211)
+				///*
+				if (i0 == 3806 || i1 == 3806 || i2 == 3806 || i3 == 3806)
 				{
 					auto distance = Point2Plane(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i2], m_prdPBuffer->m_Data[i3]);
 					if (cRelatedPos == fRelatedPos && distance >= 2 * m_thickness )
 						continue;
 					else
 					{
-						//看
-						// 看下距离 distance: 2 * m_thickness
-						// cRelatedPos ? "true":"false"
-						//  fRelatedPos ? "true":"false"
-						//
 						printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
 						printf("distance: %f, 2*thickness: %f\n", distance, 2 * m_thickness);
 						cout << "fRealtedPos: " << fRelatedPos << "  " << "cRealtedPos:" << cRelatedPos << endl;	
@@ -432,17 +427,9 @@ void CollisionSolver::CollisionResolve()
 						 bool ncRelatedPos = IsSameSide(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], nnn);
 						printf("distance: %f, 2*thickness: %f\n", newDistance, 2 * m_thickness);
 						cout << "fRealtedPos: " << fRelatedPos << "  " << "cRealtedPos:" << ncRelatedPos << endl;
-						printf("----------------------------------------------------------------------------\n");
 						m_debugFrameID++;
-						//
-						/// 当前的contact 是否是resolved ？？？？？？
-						//	看
-						//	看下距离 distance: 2 * m_thickness
-						//	cRelatedPos ? "true":"false"
-						//		fRelatedPos ? "true":"false"
-						//
 
-						string path = "D://0310ContinuousCollisionDectection//ContinuousSimData//point12test//test." + to_string(m_debugFrameID) + ".cache";
+						string path = "D://0319CCDTest//continueSimData//testData//test." + to_string(m_debugFrameID) + ".cache";
 						m_pbdObj->constrPBDBuffer.prdPBuffer.SetName("P");
 						Topology temp;
 						temp.indices = m_pbdObj->meshTopol.indices;
@@ -452,14 +439,16 @@ void CollisionSolver::CollisionResolve()
 						temp.primList.SetName("primList");
 						temp.posBuffer.SetName("P");
 						IO::SaveToplogy(temp, path);
-						///12 相关
-						/// saveTopolgy
-						/// 看到爆炸的慢动作
-						/// m_debugFrameID++
+						printf("------------------------------------------save-------------------------------------\n");
+						printf("vtxPrd: (%f, %f, %f)\n", m_prdPBuffer->m_Data[i0].x, m_prdPBuffer->m_Data[i0].y, m_prdPBuffer->m_Data[i0].z);
+						printf("p1Prd: (%f, %f, %f)\n", m_prdPBuffer->m_Data[i1].x, m_prdPBuffer->m_Data[i1].y, m_prdPBuffer->m_Data[i1].z);
+						printf("p2Prd: (%f, %f, %f)\n", m_prdPBuffer->m_Data[i2].x, m_prdPBuffer->m_Data[i2].y, m_prdPBuffer->m_Data[i2].z);
+						printf("p3Prd: (%f, %f, %f)\n", m_prdPBuffer->m_Data[i3].x, m_prdPBuffer->m_Data[i3].y, m_prdPBuffer->m_Data[i3].z);
 					}
 				}
-				*/
+				//*/
 				
+				/*
 				auto distance = Point2Plane(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i2], m_prdPBuffer->m_Data[i3]);
 				if (cRelatedPos == fRelatedPos && distance > 2 * m_thickness)
 					continue;
@@ -469,11 +458,8 @@ void CollisionSolver::CollisionResolve()
 						m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i2], m_prdPBuffer->m_Data[i3],
 						contact, i0, i1, i2, i3);
 				}
+				*/
 				
-				//printf("vtxPrd: (%f, %f, %f)\n", vtxPrd.x, vtxPrd.y, vtxPrd.z);
-				//printf("p1Prd: (%f, %f, %f)\n", p1Prd.x, p1Prd.y, p1Prd.z);
-				//printf("p2Prd: (%f, %f, %f)\n", p2Prd.x, p2Prd.y, p2Prd.z);
-				//printf("p3Prd: (%f, %f, %f)\n", p3Prd.x, p3Prd.y, p3Prd.z);
 			}
 			//if (Contact::EE)
 			//{
@@ -701,7 +687,7 @@ void CollisionSolver::CCD_SH()
 		int start = triList->m_Data[triId].x;
 		int num = triList->m_Data[triId].y;
 		m_shs->FindNeighbors(neighborList, triId);
-		m_shs->FindNeighbors(neighborList, triId);
+		//m_shs->FindNeighbors(neighborList, triId);
 
 		for (int vtxId = start; vtxId < start + num; ++vtxId)
 		{
@@ -764,63 +750,6 @@ void CollisionSolver::CCD_SH()
 	}
 	m_ccdSolverTimer->Tock();
 	PBD_DEBUGTIME( m_ccdSolverTimer->GetFuncTime());
-}
-
-void CollisionSolver::ColliWithShpGrd()
-{
-	PBD_DEBUG;
-	auto posBuffer = &(m_pbdObj->meshTopol.posBuffer);
-	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
-	for (int vtxId = 0; vtxId < posBuffer->GetSize(); ++vtxId)
-	{
-		//point collide with sphere
-		bool isCollideSphere = ColliderSphere(prdPBuffer->m_Data[vtxId], m_sphereCenter, m_sphereRadius);
-		if (isCollideSphere) //move the point to the point which intersect with sphere
-		{
-			float3 moveVector = GenerateMoveVectorSphere(m_sphereCenter, m_sphereRadius, prdPBuffer->m_Data[vtxId]);
-			prdPBuffer->m_Data[vtxId] += moveVector;
-		}
-		//point collide with ground
-		bool isCollideGoround = CollideGround(prdPBuffer->m_Data[vtxId], m_groundHeight);
-		if (isCollideGoround)
-		{
-			prdPBuffer->m_Data[vtxId].y = m_groundHeight;
-		}
-	}
-	
-}
-
-bool CollisionSolver::ColliderSphere(float3 pointPos, float3 sphereOrigin, float r)
-{
-	float d = DistanceCCD(pointPos, sphereOrigin);
-	if (d - r > 0.001)
-	{
-		return false;
-	}
-	else
-	{
-		return true;
-	}
-}
-
-bool CollisionSolver::CollideGround(float3 pointPos, float groundHeight)
-{
-	if (pointPos.y - groundHeight < 0.001)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
-float3 CollisionSolver::GenerateMoveVectorSphere(float3 sphereOrigin, float sphereRadius, float3  p)
-{
-	float moveDistance = sphereRadius - DistanceCCD(sphereOrigin, p);
-	float3 moveDirection = (p - sphereOrigin) / DistanceCCD(sphereOrigin, p);
-	float3 moveLength = moveDirection * moveDistance;
-	return moveLength;
 }
 
 void CCDTestMain()
