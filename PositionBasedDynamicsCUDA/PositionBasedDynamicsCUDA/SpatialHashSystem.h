@@ -10,7 +10,7 @@ class SpatialHashSystem
 public:
 	SpatialHashSystem(string filename, uint3 gridSize, HardwareType ht);
 	SpatialHashSystem(BufferVector3f& posBuffer, BufferInt& triIdxBuffer, HardwareType ht);
-	//SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxBuffer, uint numTriangles, uint3 gridSize, float oneCellSize, HardwareType ht);
+	//SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxBuffer, int numTriangles, int3 gridSize, float oneCellSize, HardwareType ht);
 	~SpatialHashSystem() {};
 
 	void SetGridCenter(float3 worldOrigin);
@@ -19,57 +19,50 @@ public:
 	void InitSH();
 	void UpdateSH(BufferVector3f& prdPBuffer);  // reserved for dynamic update for accelerating PBD collision detection
 	void FindNeighbors(BufferInt& neighbors,  // output: a list of triangle IDs (int)
-		uint targetTriID);   // input: a triangle ID 
+		int targetTriID);   // input: a triangle ID 
 	void SetTimer(Timer* timer) { this->m_shsTimer = timer; }
 	// Test Method
-	void SetTargetTriId(uint targetId) { m_targetId = targetId; }
+	void SetTargetTriId(int targetId) { m_targetId = targetId; }
 
 protected: // functions
-	// I/O
-	// IO::FileManager m_fm;
-	/*void readMeshFromTxt(string filename);
-	void splitString(const std::string& src, std::vector<std::string>& v, const std::string& split);
-	std::vector<std::string> splitString(const std::string& src, const std::string& split);*/
-
-	// void initSpatialHash(uint1 numTriangles, uint3 gridSize, HardwareType ht);
-	// void initSpatialHash(uint1 numTriangles, uint3 gridSize, float cellSize, HardwareType ht);
-	// void initTriangleIndex();  // initialize m_hTriangleIndex
 	void evalTriCentroids();  // evaluate the centroid for each triangle
 	void calcHashCPU();   // calculate the hash for each triangle in the grid basd on the grid cells
-	void calcHashGPU(uint* gridTriHash,	 // output
-		uint* gridtriIndex,	 // output
+	void calcHashGPU(int* gridTriHash,	 // output
+		int* gridtriIndex,	 // output
 		float* pos,			 // input: positions
 		int    numTriangles);   // calculate the hash for each triangle in the grid basd on the grid cells
 	void sortTrianglesCPU();
-	void sortTrianglesGPU(uint* dGridParticleHash,   // will change
-		uint* dGridParticleIndex,  // will change
-		uint numParticles);  // input
+	void sortTrianglesGPU(int* dGridParticleHash,   // will change
+		int* dGridParticleIndex,  // will change
+		int numParticles);  // input
 	void findCellStartCPU();
 
 
 	// TODO: Reserved for Optimization 
-	void reorderDataAndFindCellStart(uint* cellStart,
-		uint* cellEnd,
+	void reorderDataAndFindCellStart(int* cellStart,
+		int* cellEnd,
 		float* sortedPos,
 		float* sortedVel,
-		uint* gridParticleHash,
-		uint* gridParticleIndex,
+		int* gridParticleHash,
+		int* gridParticleIndex,
 		float* oldPos,
 		float* oldVel,
-		uint   numParticles,
-		uint   numCells);
+		int   numParticles,
+		int   numCells);
 
 	int3 calcGridPosCPU(float3 triPos);
-	uint calcGridHashCPU(int3 gridPos);
+	int calcGridHashCPU(int3 gridPos);
 
 	bool outsideGrid(int3 gridPos);
+
+	void checkBuffersSizes();
 
 protected: // data
 	// Grid configuration
 	HardwareType m_ht;
 	uint3 m_gridSize;
 	uint m_numTriangles;
-	uint m_numGridCells;
+	int m_numGridCells;
 	bool m_initialized = false;
 	float3 m_worldOrigin;
 	float3 m_girdStartPos;
@@ -89,8 +82,11 @@ protected: // data
 	BufferInt m_hCellStart;     // index of start of each cell in sorted list
 	BufferInt m_hCellEnd;		// index of end of cell
 
+	// bool for optimizing when the entire object is outside the grid
+	bool m_hAllOutOfGrid = true;
+
 	// Test var
-	uint m_targetId;
+	int m_targetId;
 
 	// Timer 
 	Timer* m_shsTimer;

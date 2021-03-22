@@ -5,7 +5,7 @@
 #include"PBD_Basic.cuh"
 #include "SpatialHashSystem.h"
 
-#define __ISDUPLICATE 0
+#define __ISDUPLICATE 1
 
 struct Contact
 {
@@ -66,7 +66,6 @@ public:
 	ContactData contactData;
 	void CCD_N2();
 	void CCD_SH();
-	void CollisionResolve(ContactData& ctxData);
 	void CollisionResolve();
 	void SaveResult();
 	void CollisionSolver::CCD_N2Test();
@@ -75,8 +74,8 @@ public:
 	void SaveCollision(string path); // for collision debugging
 
 		// for collision debuggin
-	BufferVector3f m_beforeColliPrdPBuffer;
-	BufferVector3f m_afterColliPrdPBuffer;
+	BufferVector3f beforeColliPrdPBuffer;
+	BufferVector3f afterColliPrdPBuffer;
 	BufferInt m_nContact;
 	BufferInt2 m_resolveTimes;
 	std::map<int, BufferFloat> m_resolveDepths;
@@ -103,21 +102,12 @@ private:
 	bool VFTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
 		Contact& contact, int i0, int i1, int i2, int i3);
-	bool VFTestDCD(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
+	bool VFDCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
 		Contact& contact);
-	bool CCDCollisionTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
+	bool VFCCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
 		Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3);
-	void CollisionResolve(Contact& ctx);
-	double signed_vf_distance(const float3& x,
-		const float3& y0, const float3& y1, const float3& y2,
-		float3* n, double* w);
-	double signed_ee_distance(const float3& x0, const float3& x1,
-		const float3& y0, const float3& y1,
-		float3* n, double* w);
-	
-
 };
 
 class CCDTest
@@ -143,8 +133,8 @@ private:
 	void readMeshFromTxt(string filename);
 	void splitString(const std::string& src, std::vector<std::string>& v, const std::string& split);
 	std::vector<std::string> splitString(const std::string& src, const std::string& split);
-	void createPrimList( int count);
-	
+	void createPrimList(int count);
+
 };
 
 const double infinity = numeric_limits<double>::infinity();
@@ -153,7 +143,7 @@ void CCDTestMain();
 int solve_cubic(double a3, double a2, double a1, double a0, double t[3]);
 int solve_quadratic(double a, double b, double c, double x[2]);
 double newtons_method(double a, double b, double c, double d, double x0, int init_dir);
-bool IsSameSide(float3 vtx, float3 pvtx, float3 n);
+bool RelativePos(float3 vtx, float3 pvtx, float3 n);
 float Point2Plane(float3 vtx, float3 p1, float3 p2, float3 p3);
 float3 pos(const float3 pos, const float3 prdPos, double t);
 

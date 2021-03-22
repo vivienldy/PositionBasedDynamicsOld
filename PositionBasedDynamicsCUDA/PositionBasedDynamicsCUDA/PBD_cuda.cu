@@ -1002,20 +1002,10 @@ void SolverPBD::advectCPU(float dt)
 
 	for (int i = 0; i < velBuffer->GetSize(); i++)
 	{
-		/*if (i == 30)
-			printf("old velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
 		velBuffer->m_Data[i] += m_pbdObj->gravity * dt;
-		/*if(i == 30)
-			printf("new velocity Buffer: %f, %f, %f \n", velBuffer->m_Data[i].x, velBuffer->m_Data[i].y, velBuffer->m_Data[i].z);*/
-		//velBuffer->m_Data[i] *= powf(m_pbdObj->dampingRate, dt);
-
 		prdPBuffer->m_Data[i] = positionBuffer->m_Data[i] + velBuffer->m_Data[i] * dt;
 
-		//printf("postion Buffer: %f, %f, %f \n", prdPBuffer.m_Data[j].x, prdPBuffer.m_Data[j].y, prdPBuffer.m_Data[j].z);
-
 	}
-	//std::cout << "Distance: "<<__FUNCTION__ << Distance(prdPBuffer->m_Data[985], prdPBuffer->m_Data[1286]) << std::endl;
-
 }
 
 void SolverPBD::advectGPU(float dt)
@@ -1064,7 +1054,7 @@ void SolverPBD::advectGPU(float dt)
 void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 {
 	m_pbdSolverTimer->Tick();
-	switch (m_ht)    // TODO: change back to ht
+	switch (m_ht)   
 	{
 	case CPU:
 		projectConstraintCPU(st, iterations);
@@ -1088,11 +1078,6 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 	auto stiffnessBuffer = &(m_pbdObj->constrPBDBuffer.stiffnessBuffer);
 	// auto restPosBuffer = &(m_pbdObj->constrPBDBuffer.restPosBuffer);
 	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
-	//printf("Before Project Constraint CPU:");
-	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
-	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
-	//	prdPBuffer->m_Data[pbdObj->resY - 1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
-	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
 	for (size_t ii = 0; ii < iterations; ii++)
 	{
 		//std::cout << "ii:" << ii << std::endl;
@@ -1384,8 +1369,6 @@ void SolverPBD::integrationCPU(float dt)
 		positionBuffer->m_Data[i] = prdPBuffer->m_Data[i];
 
 	}
-	//std::cout << "Distance:" << Distance(prdPBuffer->m_Data[985], prdPBuffer->m_Data[1286]) << std::endl;
-	//std::cout << "positionBuffer:" << Distance(positionBuffer->m_Data[985], positionBuffer->m_Data[1286]) << std::endl;
 }
 
 void __global__ IntegrationGPUKernel(
