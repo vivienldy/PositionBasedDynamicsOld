@@ -157,13 +157,13 @@ void CollisionTest(int colliPasses) // for later data oriented continue sim
 
 static bool gEnableSelf = true;
 void RegularSim();
-//void RegularSimColliWithProj();
+void RegularSimColliWithProj();
 
 int main()
 {
 	BufferDebugModule::GetInstance()->Load();
-	RegularSim();
-	//RegularSimColliWithProj();
+	//RegularSim();
+	RegularSimColliWithProj();
 	//ContinueSim();
 	//CollisionTest(gCollisionPasses);
 	return 0;
@@ -273,7 +273,7 @@ void RegularSim()
 		PBD_DEBUGTIME(timers[globalTimer].GetFuncTime());
 	}
 }
-/*
+
 void RegularSimColliWithProj()
 {
 	Timer timers[nModules];
@@ -308,7 +308,8 @@ void RegularSimColliWithProj()
 	shs.SetTimer(&timers[shsTimer]);
 	shs.InitSH();
 
-	CollisionSolverNew colliSolver;
+	CollisionSolver colliSolver;
+	colliSolver.SetTarget(&pbdObj);
 	colliSolver.SetThickness(0.03f);
 	colliSolver.SetIterations(gCollisionResolves);
 	colliSolver.SetAcceStruct(&shs);
@@ -328,7 +329,7 @@ void RegularSimColliWithProj()
 		for (size_t s = 0; s < gSubStep; s++)
 		{
 			pbdSolver.Advect(gDeltaTime);
-			pbdSolver.ProjectConstraintWithColli(st, gPBDIteration, colliSolver);
+			pbdSolver.ProjectConstraintWithColli(st, gPBDIteration, &colliSolver);
 			pbdSolver.Integration(gDeltaTime);
 			string path = to_string((i - 1) * gSubStep + s + 1) + ".cache";
 			pbdObj.SaveMeshTopol(meshPath + path);
@@ -343,4 +344,4 @@ void RegularSimColliWithProj()
 		PBD_DEBUGTIME(timers[globalTimer].GetFuncTime());
 	}
 }
-*/
+

@@ -78,6 +78,7 @@ inline std::ofstream& operator<<(std::ofstream& ofs, int2& val)
 	return ofs;
 }
 
+class CollisionSolver;
 
 struct P2P
 {
@@ -227,7 +228,7 @@ public:
 	}
 	void Advect(float dt);
 	void ProjectConstraint(SolverType st, int iterations);
-	//void ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolverNew colliSolver);
+	void ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver);
 	void Integration(float dt);
 	void SetTimer(Timer* timer) { this->m_pbdSolverTimer = timer; }
 
@@ -245,7 +246,7 @@ private:
 	void advectCPU(float dt);
 	void advectGPU(float dt);
 	void projectConstraintCPU(SolverType st, int iterations);
-	//void projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolverNew colliSolver);
+	void projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver);
 	void projectConstraintGPU(SolverType st, int iterations);
 	void integrationCPU(float dt);
 	void integrationGPU(float dt);

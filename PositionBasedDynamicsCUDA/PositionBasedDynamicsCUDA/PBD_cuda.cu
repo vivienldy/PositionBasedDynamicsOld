@@ -1,5 +1,5 @@
 ﻿#include "PBD_Basic.cuh"
-
+#include"CCD_Basic.h"
 KERNEL_FUNC float Distance(float3 p1, float3 p2)
 {
 	return powf(powf((p1.x - p2.x), 2) + powf((p1.y - p2.y), 2) + powf((p1.z - p2.z), 2), 0.5);
@@ -1068,8 +1068,8 @@ void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 	m_pbdSolverTimer->Tock();
 	PBD_DEBUGTIME(m_pbdSolverTimer->GetFuncTime());
 }
-/*
-void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolverNew colliSolver)
+
+void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver)
 {
 	m_pbdSolverTimer->Tick();
 	switch (m_ht)
@@ -1085,7 +1085,7 @@ void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, Collis
 	}
 	m_pbdSolverTimer->Tock();
 }
-*/
+
 void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 {
 	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
@@ -1125,8 +1125,8 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 	}
 }
 
-/*
-void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolverNew colliSolver)
+
+void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver)
 {
 	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
 	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
@@ -1137,13 +1137,13 @@ void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, Col
 	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
 	for (size_t ii = 0; ii < iterations; ii++)
 	{
-		if (iterations %= 10)
+		if ((ii % 10 ==0) || (ii == iterations - 1)) // 0 10 20 30 || == -1
 		{
-			colliSolver.CCD_SH(m_pbdObj->meshTopol.indices, m_pbdObj->meshTopol.primList, m_pbdObj->meshTopol.posBuffer, m_pbdObj->constrPBDBuffer.prdPBuffer);
+			colliSolver->CCD_SH();
 		}
+		PBD_DEBUG;
 		for (size_t i = 0; i < primList->GetSize(); i++)
 		{
-			PBD_DEBUG;
 			if (primList->m_Data[i].y != 2)
 				continue;
 			int i0 = indices->m_Data[primList->m_Data[i].x];
@@ -1166,11 +1166,11 @@ void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, Col
 			prdPBuffer->m_Data[i0] += dp1;
 			prdPBuffer->m_Data[i1] += dp2;
 		}
-		colliSolver.CollisionResolve(m_pbdObj->meshTopol.posBuffer, m_pbdObj->constrPBDBuffer.prdPBuffer);
+		colliSolver->CollisionResolve();
 		ColliWithShpGrd();
 	}
 }
-*/
+
 // Attach Points
 //for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
 //{
