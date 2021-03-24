@@ -4,6 +4,7 @@
 
 #include"PBD_Basic.cuh"
 #include "SpatialHashSystem.h"
+#include "Utility.h"
 
 #define __ISDUPLICATE 1
 
@@ -67,9 +68,10 @@ public:
 	void CCD_N2();
 	void CCD_SH();
 	void CollisionResolve();
+	void CollisionResolveWithoutItreation();
 	void SaveResult();
-	void CollisionSolver::CCD_N2Test();
-	void CollisionSolver::CollisionResolveTest();
+	void CCD_N2Test();
+	void CollisionResolveTest();
 	void SetTimer(Timer* timer) { this->m_ccdSolverTimer = timer; }
 	void SaveCollision(string path); // for collision debugging
 
@@ -77,7 +79,6 @@ public:
 	BufferVector3f beforeColliPrdPBuffer;
 	BufferVector3f afterColliPrdPBuffer;
 	BufferInt m_nContact;
-	BufferInt2 m_resolveTimes;
 	std::map<int, BufferFloat> m_resolveDepths;
 	int m_debugFrameID;
 	BufferInt vfIndices;
@@ -90,14 +91,14 @@ private:
 	Timer* m_ccdSolverTimer;
 	//bool m_timerStatus;  // 1 - on; 0 - off
 
-	// for ccd testing
-	Topology m_topol;
-	BufferVector3f m_prdPBuffer;
-
 	SpatialHashSystem* m_shs;
 	int m_iterations;
 	float m_thickness;
-	// for static sphere & ground collide
+	BufferInt m_vfResolveTimes;
+
+	// for ccd testing
+	Topology m_topol;
+	BufferVector3f m_prdPBuffer;
 
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
@@ -162,8 +163,8 @@ void CCD_SH(ContactData& contactData, SpatialHashSystem& shs, Topology meshTopol
 bool VFTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact& contact, float thickness, int i0, int i1, int i2, int i3);
 bool VFDCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact& contact, float thickness);
 bool VFCCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3);
-void CollisionResolve(Topology meshTopol, BufferVector3f& prdPBuffer, ContactData contactData, int itereations, float thickness, int& debugFrameId, BufferInt& vfIndices);
-void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,Contact contact, float thickness, int i0, int i1, int i2, int i3);
+void CollisionResolve(Topology meshTopol, BufferVector3f& prdPBuffer, ContactData contactData, int itereations, float thickness, int& debugFrameId, BufferInt& vfIndices, BufferInt& resolveTimes);
+void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,Contact contact, float thickness, BufferInt& resolveTimes, int i0, int i1, int i2, int i3);
 // for collision test 
 void readMeshFromTxt(string filename, Topology& topol);
 void readBufferFromTxt(string filename, BufferVector3f& prdPBuffer);

@@ -5,6 +5,8 @@
 #include <assert.h>
 #include "helper_math.h"
 
+
+
 class SpatialHashSystem
 {
 public:

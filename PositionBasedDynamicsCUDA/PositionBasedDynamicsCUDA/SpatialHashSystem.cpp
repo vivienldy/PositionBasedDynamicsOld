@@ -116,7 +116,7 @@ void SpatialHashSystem::UpdateSH(BufferVector3f& prdPBuffer)
 		break;
 	}
 	//m_shsTimer->Tock();
-	//PBD_DEBUGTIME(m_shsTimer->GetFuncTime());
+	PBD_DEBUGTIME(m_shsTimer->GetFuncTime());
 	// printf("all out of is %d", m_hAllOutOfGrid);
 }
 

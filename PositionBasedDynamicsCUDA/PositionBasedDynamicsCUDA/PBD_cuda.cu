@@ -1068,7 +1068,24 @@ void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 	m_pbdSolverTimer->Tock();
 	PBD_DEBUGTIME(m_pbdSolverTimer->GetFuncTime());
 }
-
+/*
+void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolverNew colliSolver)
+{
+	m_pbdSolverTimer->Tick();
+	switch (m_ht)
+	{
+	case CPU:
+		projectConstraintWithColliCPU(st, iterations, colliSolver);
+		break;
+	case GPU:
+		projectConstraintGPU(st, iterations);
+		break;
+	default:
+		break;
+	}
+	m_pbdSolverTimer->Tock();
+}
+*/
 void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 {
 	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
@@ -1080,8 +1097,7 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
 	for (size_t ii = 0; ii < iterations; ii++)
 	{
-		//std::cout << "ii:" << ii << std::endl;
-		for (size_t i = 0; i < primList->GetSize(); i++)
+ 		for (size_t i = 0; i < primList->GetSize(); i++)
 		{
 			if (primList->m_Data[i].y != 2)
 				continue;
@@ -1105,44 +1121,83 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 			prdPBuffer->m_Data[i0] += dp1;
 			prdPBuffer->m_Data[i1] += dp2;
 		}
-
 		ColliWithShpGrd();
-
-		// Attach Points
-		//for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
-		//{
-		//	//attach points
-		//	if (j == 0)
-		//	{
-		//		prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
-		//	}
-		//	if (j == m_pbdObj->resY - 1)
-		//	{
-		//		prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
-		//	}
-
-		//	////point collide with sphere
-		//	//bool isCollideSphere = ColliderSphere(prdPBuffer.m_Data[j], sphereOrigin, sphereRadius, j);
-		//	//if (isCollideSphere) //move the point to the point which intersect with sphere
-		//	//{
-		//	//	float3 moveVector = GenerateMoveVectorSphere(sphereOrigin, sphereRadius, prdPBuffer.m_Data[j], j);
-		//	//	prdPBuffer.m_Data[j] += moveVector;
-		//	//}
-		//	////point collide with ground
-		//	//bool isCollideGoround = CollideGround(prdPBuffer.m_Data[j], groundCenter);
-		//	//if (isCollideGoround)
-		//	//{
-		//	//	prdPBuffer.m_Data[j].y = groundCenter.y;
-		//	//}
-		//}
 	}
-	//printf("After Project Constraint CPU:");
-	//printf("point 0: %f, %f, %f; point col-1: %f, %f, %f\n",
-	//	prdPBuffer->m_Data[0].x, prdPBuffer->m_Data[0].y, prdPBuffer->m_Data[0].z,
-	//	prdPBuffer->m_Data[pbdObj->resY - 1].x, prdPBuffer->m_Data[pbdObj->resY - 1].y,
-	//	prdPBuffer->m_Data[pbdObj->resY - 1].z);
-	// printf("Project Constraint\n");
 }
+
+/*
+void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolverNew colliSolver)
+{
+	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	auto massBuffer = &(m_pbdObj->massBuffer);
+	auto restLengthBuffer = &(m_pbdObj->constrPBDBuffer.restLengthBuffer);
+	auto stiffnessBuffer = &(m_pbdObj->constrPBDBuffer.stiffnessBuffer);
+	// auto restPosBuffer = &(m_pbdObj->constrPBDBuffer.restPosBuffer);
+	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
+	for (size_t ii = 0; ii < iterations; ii++)
+	{
+		if (iterations %= 10)
+		{
+			colliSolver.CCD_SH(m_pbdObj->meshTopol.indices, m_pbdObj->meshTopol.primList, m_pbdObj->meshTopol.posBuffer, m_pbdObj->constrPBDBuffer.prdPBuffer);
+		}
+		for (size_t i = 0; i < primList->GetSize(); i++)
+		{
+			PBD_DEBUG;
+			if (primList->m_Data[i].y != 2)
+				continue;
+			int i0 = indices->m_Data[primList->m_Data[i].x];
+			int i1 = indices->m_Data[primList->m_Data[i].x + 1];
+			float3 dp1;
+			float3 dp2;
+			float d = Distance(prdPBuffer->m_Data[i0], prdPBuffer->m_Data[i1]);
+			float3 r = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
+			r = normalize(r);
+
+			dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.x;
+			dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.y;
+			dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.z;
+			dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.x;
+			dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.y;
+			dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.z;
+			float k = 1;// -powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
+			dp1 *= k;
+			dp2 *= k;
+			prdPBuffer->m_Data[i0] += dp1;
+			prdPBuffer->m_Data[i1] += dp2;
+		}
+		colliSolver.CollisionResolve(m_pbdObj->meshTopol.posBuffer, m_pbdObj->constrPBDBuffer.prdPBuffer);
+		ColliWithShpGrd();
+	}
+}
+*/
+// Attach Points
+//for (size_t j = 0; j < prdPBuffer->GetSize(); j++)
+//{
+//	//attach points
+//	if (j == 0)
+//	{
+//		prdPBuffer->m_Data[j] = restPosBuffer->m_Data[0];
+//	}
+//	if (j == m_pbdObj->resY - 1)
+//	{
+//		prdPBuffer->m_Data[j] = restPosBuffer->m_Data[1];
+//	}
+
+//	////point collide with sphere
+//	//bool isCollideSphere = ColliderSphere(prdPBuffer.m_Data[j], sphereOrigin, sphereRadius, j);
+//	//if (isCollideSphere) //move the point to the point which intersect with sphere
+//	//{
+//	//	float3 moveVector = GenerateMoveVectorSphere(sphereOrigin, sphereRadius, prdPBuffer.m_Data[j], j);
+//	//	prdPBuffer.m_Data[j] += moveVector;
+//	//}
+//	////point collide with ground
+//	//bool isCollideGoround = CollideGround(prdPBuffer.m_Data[j], groundCenter);
+//	//if (isCollideGoround)
+//	//{
+//	//	prdPBuffer.m_Data[j].y = groundCenter.y;
+//	//}
+//}
 
 void __global__ ProjectContraintsGPUKernel(
 	int resY,
