@@ -10,7 +10,7 @@ class SpatialHashSystem
 public:
 	SpatialHashSystem(string filename, uint3 gridSize, HardwareType ht);
 	SpatialHashSystem(BufferVector3f& posBuffer, BufferInt& triIdxBuffer, HardwareType ht);
-	//SpatialHashSystem(BufferVector3f posBuffer, BufferInt triIdxBuffer, int numTriangles, int3 gridSize, float oneCellSize, HardwareType ht);
+	SpatialHashSystem(BufferVector3f& posBuffer, BufferInt& triIdxBuffer, HardwareType ht, float3 gridCenter, uint3 gridSize, float3 cellSize);
 	~SpatialHashSystem() {};
 
 	void SetGridCenter(float3 worldOrigin);

@@ -12,6 +12,30 @@ using namespace std;
 static std::unordered_map<std::string, int> gTypeMapId;
 
 
+
+
+inline __host__ __device__ void printInfo(const float3& v, const char* head)
+{
+	printf("%s [%f,%f,%f]\n", head, v.x, v.y, v.z);
+}
+
+inline __host__ __device__ void printInfo(const char* head, const float3& v)
+{
+	printInfo(v, head);
+}
+
+inline __host__ __device__ void printInfo(const char* head, const float4& v)
+{
+	printf("%s [%f,%f,%f,%f]\n", head, v.x, v.y, v.z, v.w);
+}
+
+inline __host__ __device__ void printInfo(const char* head, const int3& v)
+{
+	printf("%s [%d,%d,%d]\n", head, v.x, v.y, v.z);
+}
+
+///---------------------------------------------------------------------------------------------
+
 template<class T>
 class Buffer
 {

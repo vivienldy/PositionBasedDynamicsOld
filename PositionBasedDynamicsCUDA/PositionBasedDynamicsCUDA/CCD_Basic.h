@@ -73,13 +73,16 @@ public:
 	void SetTimer(Timer* timer) { this->m_ccdSolverTimer = timer; }
 	void SaveCollision(string path); // for collision debugging
 
-		// for collision debuggin
+    // for collision debugging
 	BufferVector3f beforeColliPrdPBuffer;
 	BufferVector3f afterColliPrdPBuffer;
 	BufferInt m_nContact;
 	BufferInt2 m_resolveTimes;
 	std::map<int, BufferFloat> m_resolveDepths;
 	int m_debugFrameID;
+	BufferInt vfIndices;
+	BufferVector3f afterProjPrdpBuffer;
+	
 
 private:
 	PBDObject* m_pbdObj;
@@ -146,11 +149,22 @@ double newtons_method(double a, double b, double c, double d, double x0, int ini
 bool RelativePos(float3 vtx, float3 pvtx, float3 n);
 float Point2Plane(float3 vtx, float3 p1, float3 p2, float3 p3);
 float3 pos(const float3 pos, const float3 prdPos, double t);
-
+float3 BarycentricCoord(float3 pos, float3 p0, float3 p1, float3 p2);
 
 inline auto stp(const float3& u, const float3& v, const float3& w) -> decltype(dot(u, cross(v, w))) { return dot(u, cross(v, w)); }
 template <typename T> inline  T sgn(const T& x) { return x < 0 ? -1 : 1; }
 inline auto norm2(const float3& u)-> decltype(dot(u, u)) { return dot(u, u); }
 template <typename T> inline T min(const T& a, const T& b, const T& c) { return std::min(a, std::min(b, c)); }
 template <typename T> inline T min(const T& a, const T& b, const T& c, const T& d) { return std::min(std::min(a, b), std::min(c, d)); }
+
+// -------------- Data Orienated -------------------
+void CCD_SH(ContactData& contactData, SpatialHashSystem& shs, Topology meshTopol, BufferVector3f prdPBuffer, float thickness);
+bool VFTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact& contact, float thickness, int i0, int i1, int i2, int i3);
+bool VFDCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact& contact, float thickness);
+bool VFCCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3);
+void CollisionResolve(Topology meshTopol, BufferVector3f& prdPBuffer, ContactData contactData, int itereations, float thickness, int& debugFrameId, BufferInt& vfIndices);
+void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,Contact contact, float thickness, int i0, int i1, int i2, int i3);
+// for collision test 
+void readMeshFromTxt(string filename, Topology& topol);
+void readBufferFromTxt(string filename, BufferVector3f& prdPBuffer);
 #endif
