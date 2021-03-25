@@ -99,7 +99,7 @@ void SpatialHashSystem::InitSH()
 
 void SpatialHashSystem::UpdateSH(BufferVector3f& prdPBuffer)
 {
-	//m_shsTimer->Tick();
+	m_shsTimer->Tick();
 	assert(m_initialized);
 	switch (m_ht)
 	{
@@ -115,8 +115,8 @@ void SpatialHashSystem::UpdateSH(BufferVector3f& prdPBuffer)
 	default:
 		break;
 	}
-	//m_shsTimer->Tock();
-	//PBD_DEBUGTIME(m_shsTimer->GetFuncTime());
+	m_shsTimer->Tock();
+	PBD_DEBUGTIME(m_shsTimer->GetFuncTime());
 	// printf("all out of is %d", m_hAllOutOfGrid);
 }
 

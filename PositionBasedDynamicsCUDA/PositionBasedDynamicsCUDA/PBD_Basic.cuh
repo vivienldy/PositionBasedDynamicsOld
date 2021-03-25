@@ -31,6 +31,8 @@ using namespace std;
 	#define PBD_DEBUG
 #endif //  __DEBUG
 
+#define CONTACT_MERGE 0
+
 #define KERNEL_FUNC __device__ __host__ 
 #define FORBIDBITS 64
 #define MAXFORBID 18446744073709551615ul
@@ -228,7 +230,7 @@ public:
 	}
 	void Advect(float dt);
 	void ProjectConstraint(SolverType st, int iterations);
-	void ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver);
+	void ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver, BufferVector3f& fixedBuffer);
 	void Integration(float dt);
 	void SetTimer(Timer* timer) { this->m_pbdSolverTimer = timer; }
 
@@ -246,7 +248,7 @@ private:
 	void advectCPU(float dt);
 	void advectGPU(float dt);
 	void projectConstraintCPU(SolverType st, int iterations);
-	void projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver);
+	void projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver, BufferVector3f& fixedBuffer);
 	void projectConstraintGPU(SolverType st, int iterations);
 	void integrationCPU(float dt);
 	void integrationGPU(float dt);
