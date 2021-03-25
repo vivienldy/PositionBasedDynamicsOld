@@ -1167,8 +1167,7 @@ void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, Col
 			prdPBuffer->m_Data[i0] += dp1;
 			prdPBuffer->m_Data[i1] += dp2;
 		}
-		colliSolver->CollisionResolve();
-		//colliSolver->CollisionResolveNew(fixedBuffer);
+		colliSolver->CollisionResolveNew(fixedBuffer);
 		ColliWithShpGrd();
 	}
 }

@@ -284,7 +284,7 @@ bool CollisionSolver::VFTest(
 	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
 	Contact& contact, int i0, int i1, int i2, int i3)
 {
-	if (VFCCDTest(vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP, Contact::VF, contact, i0, i1, i2, i3))
+	if (VFCCDTest(vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP, contact, i0, i1, i2, i3))
 	{
 		contact.type = Contact::VF;
 		//// for collision debugging
@@ -294,9 +294,9 @@ bool CollisionSolver::VFTest(
 		//vfIndices.m_Data.push_back(i3);
 		//printf("v:%d, f:%d, %d, %d\n", i0, i1, i2, i3);
 		//printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
-			//vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
-			//vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z,
-			//contact.w[1], contact.w[2], contact.w[3], contact.t);
+		//	vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+		//	vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z,
+		//	contact.w[1], contact.w[2], contact.w[3], contact.t);
 		//printf("------ ccd ------\n");
 		//if (i0 == 3806 || i1 == 3806 || i2 == 3806 || i3 == 3806)
 		//{
@@ -325,7 +325,7 @@ bool CollisionSolver::VFTest(
 		//printf("v:%d, f:%d, %d, %d\n", i0, i1, i2, i3);
 		//printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
 		//	vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
-			//vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z,
+		//	vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z,
 		//	contact.w[1], contact.w[2], contact.w[3], contact.t);
 		//printf("------ dcd ------\n");
 		//if (i0 == 3806 || i1 == 3806 || i2 == 3806 || i3 == 3806)
@@ -349,35 +349,34 @@ bool CollisionSolver::VFDCDTest(
 	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
 	Contact& contact)
 {
-	float3 colliFreeN = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
-	//contact.n = colliFreeN;
-	float d = Point2Plane(vtxPrdP, p1PrdP, p2PrdP, p3PrdP);
-	if (d >= 2 * m_thickness)
+	float dist = Point2Plane(vtxPrdP, p1PrdP, p2PrdP, p3PrdP);
+	if (dist >= 2 * m_thickness)
 		return false;
 	float3 weight = BarycentricCoord(vtxPrdP, p1PrdP, p2PrdP, p3PrdP);
 	contact.w[0] = 1;
 	contact.w[1] = weight.x;
 	contact.w[2] = weight.y;
 	contact.w[3] = weight.z;
-	contact.n = normalize(cross(normalize(p2PrdP - p1PrdP), normalize(p3PrdP - p1PrdP)));
+	float3 colliFreeN = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
+	contact.n = colliFreeN;
 	contact.t = 0.0f;
-	bool inside;
-	inside = (min(contact.w[1], contact.w[2], contact.w[3]) >= 1e-6);
 	bool colliFreeDir = Direction(vtxPos, p1Pos, colliFreeN);
 	contact.colliFreeDir = colliFreeDir;
+	bool inside;
+	inside = (min(weight.x, weight.y, weight.z) >= 1e-6);
 	if (!inside)
 		return false;
 	return true;
 }
 
-
-bool CollisionSolver::VFCCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
-	float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
-	Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3)
+bool CollisionSolver::VFCCDTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	 Contact& contact, int i0, int i1, int i2, int i3)
 {
-	const float3& x0 = vtx_o, v0 = vtx_p - x0;  // x0: V's pos   v0: V's prdPos - pos
-	float3 x1 = p1_o - x0, x2 = p2_o - x0, x3 = p3_o - x0; // x: p's pos - V's pos
-	float3 v1 = (p1_p - p1_o) - v0, v2 = (p2_p - p2_o) - v0, v3 = (p3_p - p3_o) - v0; // v: (p's prdPos - p's pos) - v0
+	const float3& x0 = vtxPos, v0 = vtxPrdP - x0;  // x0: V's pos   v0: V's prdPos - pos
+	float3 x1 = p1Pos - x0, x2 = p2Pos - x0, x3 = p3Pos - x0; // x: p's pos - V's pos
+	float3 v1 = (p1PrdP - p1Pos) - v0, v2 = (p2PrdP - p2Pos) - v0, v3 = (p3PrdP - p3Pos) - v0; // v: (p's prdPos - p's pos) - v0
 	double a0 = stp(x1, x2, x3), a1 = stp(v1, x2, x3) + stp(x1, v2, x3) + stp(x1, x2, v3), a2 = stp(x1, v2, v3) + stp(v1, x2, v3) + stp(v1, v2, x3), a3 = stp(v1, v2, v3);
 	double t[4];
 	int nsol = solve_cubic(a3, a2, a1, a0, t); // number of solution
@@ -387,50 +386,42 @@ bool CollisionSolver::VFCCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p
 		if (t[i] < 0 || t[i] > 1)
 			continue;
 		contact.t = t[i];
-		float3 colliPos0 = pos(vtx_o, vtx_p, t[i]), colliPos1 = pos(p1_o, p1_p, t[i]), colliPos2 = pos(p2_o, p2_p, t[i]), colliPos3 = pos(p3_o, p3_p, t[i]);
-		float3& n = contact.n;
-		double* w = contact.w;
+		float3 colliFreeN = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
+		contact.n = colliFreeN;
+		bool colliFreeDir = Direction(vtxPos, p1Pos, colliFreeN);
+		contact.colliFreeDir = colliFreeDir;
+		float3 colliPos0 = pos(vtxPos, vtxPrdP, t[i]), colliPos1 = pos(p1Pos, p1PrdP, t[i]), colliPos2 = pos(p2Pos, p2PrdP, t[i]), colliPos3 = pos(p3Pos, p3PrdP, t[i]);
+		float3 cn = normalize(cross(colliPos2 - colliPos1, colliPos3 - colliPos1));
 		double d; // is vtx on tirangle
+		d = dot(colliPos0 - colliPos1, cn);
+		float3 weight = BarycentricCoord(colliPos0, colliPos1, colliPos2, colliPos3);
+		contact.w[0] = 1;
+		contact.w[1] = weight.x;
+		contact.w[2] = weight.y;
+		contact.w[3] = weight.z;
 		bool inside;
-		float3 weight;
-		contact.n = normalize(cross(p2_p - p1_p, p3_p - p1_p));
-		//compute weight and normal
-		if (type == Contact::VF)
+		inside = (min(weight.x, weight.y, weight.z) >= 1e-6);
+		/*
+		if (i0 == 497 )
 		{
-			float3 cn = normalize(cross(colliPos2 - colliPos1, colliPos3 - colliPos1));
-			d = dot(colliPos0 - colliPos1, cn);
-			weight = BarycentricCoord(colliPos0, colliPos1, colliPos2, colliPos3);
-			contact.w[0] = 1;
-			contact.w[1] = weight.x;
-			contact.w[2] = weight.y;
-			contact.w[3] = weight.z;
-			inside = (min(w[1], w[2], w[3]) >= 1e-6);
-			float3 colliFreeN = normalize(cross(p1_o - p1_o, p1_o - p1_o));
-			contact.n = colliFreeN;
-			bool colliFreeDir = Direction(vtx_o, p1_o, colliFreeN);
-			contact.colliFreeDir = colliFreeDir;
-			/*
-			if (i0 == 497 )
-			{
-				cout << a;
-				cout << " " << b << endl;
-				printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
-					vtx_o.x, vtx_o.y, vtx_o.z, p1_o.x, p1_o.y, p1_o.z, p2_o.x, p2_o.y, p2_o.z, p3_o.x, p3_o.y, p3_o.z,
-					vtx_p.x, vtx_p.y, vtx_p.z, p1_p.x, p1_p.y, p1_p.z, p2_p.x, p2_p.y, p2_p.z, p3_p.x, p3_p.y, p3_p.z);
-				printf("-------(%d, %d, %d)-------\n", i1, i2, i3);
-				printf("x0: (%f, %f, %f)\n", x0.x, x0.y, x0.z);
-				printf("x1: (%f, %f, %f)\n", x1.x, x1.y, x1.z);
-				printf("x2: (%f, %f, %f)\n", x2.x, x2.y, x2.z);
-				printf("x3: (%f, %f, %f)\n", x3.x, x3.y, x3.z);
-				printf("w: (%f, %f, %f)\n", w[1], w[2], w[3]);
-				printf("normal: (%f, %f, %f)\n", n.x, n.y, n.z);
-				printf("normal: (%f, %f, %f)\n", contact.n.x, contact.n.y, contact.n.z);
-				cout << "inside: " << inside << endl;
-				printf("contact t: %f\n", contact.t);
-				printf("d :%f\n", abs(d));
-			}
-			*/
+			cout << a;
+			cout << " " << b << endl;
+			printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+				vtx_o.x, vtx_o.y, vtx_o.z, p1_o.x, p1_o.y, p1_o.z, p2_o.x, p2_o.y, p2_o.z, p3_o.x, p3_o.y, p3_o.z,
+				vtx_p.x, vtx_p.y, vtx_p.z, p1_p.x, p1_p.y, p1_p.z, p2_p.x, p2_p.y, p2_p.z, p3_p.x, p3_p.y, p3_p.z);
+			printf("-------(%d, %d, %d)-------\n", i1, i2, i3);
+			printf("x0: (%f, %f, %f)\n", x0.x, x0.y, x0.z);
+			printf("x1: (%f, %f, %f)\n", x1.x, x1.y, x1.z);
+			printf("x2: (%f, %f, %f)\n", x2.x, x2.y, x2.z);
+			printf("x3: (%f, %f, %f)\n", x3.x, x3.y, x3.z);
+			printf("w: (%f, %f, %f)\n", w[1], w[2], w[3]);
+			printf("normal: (%f, %f, %f)\n", n.x, n.y, n.z);
+			printf("normal: (%f, %f, %f)\n", contact.n.x, contact.n.y, contact.n.z);
+			cout << "inside: " << inside << endl;
+			printf("contact t: %f\n", contact.t);
+			printf("d :%f\n", abs(d));
 		}
+		*/
 		if (abs(d) < 1e-6 && inside)
 		{
 			return true;
@@ -471,7 +462,7 @@ void CollisionSolver::VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float
 			//if (i0 == 1770 || i1 == 1770 || i2 == 1770 || i3 == 1770)
 				//		printf("---------vf ccd----------\n");
 		}
-		else if (VFCCDTest(vtxPos, p1Pos, p2Pos, p3Pos, vtxPrd, p1Prd, p2Prd, p3Prd, Contact::VF, contact, i0, i1, i2, i3)) // have been resolve before then test again
+		else if (VFCCDTest(vtxPos, p1Pos, p2Pos, p3Pos, vtxPrd, p1Prd, p2Prd, p3Prd, contact, i0, i1, i2, i3)) // have been resolve before then test again
 		{
 			dp = (depth + 2 * m_thickness) * 0.5;
 			//if (i0 == 1770 || i1 == 1770 || i2 == 1770 || i3 == 1770)
