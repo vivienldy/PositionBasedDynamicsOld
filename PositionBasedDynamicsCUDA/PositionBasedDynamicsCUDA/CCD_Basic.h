@@ -10,7 +10,7 @@
 
 struct Contact
 {
-	enum Type { VF, EE} type;
+	enum Type { VF, EE, VFDCD} type;
 	float t; // time
 	bool colliFreeDir;
 	double w[4];  // weight
@@ -118,7 +118,7 @@ private:
 		Contact& contact);
 	bool VFCCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
-	    Contact& contact, int i0, int i1, int i2, int i3);
+		Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3);
 };
 
 class CCDTest
