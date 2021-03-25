@@ -10,9 +10,9 @@
 
 struct Contact
 {
-	enum Type { VF, EE} type;
+	enum Type { VF, EE, VFDCD } type;
+	//bool thicknessVF;
 	float t; // time
-	bool colliFreeDir;
 	double w[4];  // weight
 	float3 n; // normal
 };
@@ -69,7 +69,6 @@ public:
 	void CCD_SH();
 	void CollisionResolve();
 	void CollisionResolveWithoutItreation();
-	void CollisionResolveNew(BufferVector3f& fixedBuffer);
 	void SaveResult();
 	void CCD_N2Test();
 	void CollisionResolveTest();
@@ -104,13 +103,7 @@ private:
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
 		Contact ctx, int  i0, int i1, int i2, int i3);
-	void VFResolveNew(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
-		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
-		Contact& contact, int  i0, int i1, int i2, int i3, BufferVector3f& fixedBuffer);
 	bool VFTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
-		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
-		Contact& contact, int i0, int i1, int i2, int i3);
-	bool VFResolveTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
 		Contact& contact, int i0, int i1, int i2, int i3);
 	bool VFDCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
@@ -118,7 +111,7 @@ private:
 		Contact& contact);
 	bool VFCCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
-	    Contact& contact, int i0, int i1, int i2, int i3);
+		Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3);
 };
 
 class CCDTest
@@ -154,7 +147,7 @@ void CCDTestMain();
 int solve_cubic(double a3, double a2, double a1, double a0, double t[3]);
 int solve_quadratic(double a, double b, double c, double x[2]);
 double newtons_method(double a, double b, double c, double d, double x0, int init_dir);
-bool Direction(float3 vtx, float3 pvtx, float3 n);
+bool RelativePos(float3 vtx, float3 pvtx, float3 n);
 float Point2Plane(float3 vtx, float3 p1, float3 p2, float3 p3);
 float3 pos(const float3 pos, const float3 prdPos, double t);
 float3 BarycentricCoord(float3 pos, float3 p0, float3 p1, float3 p2);

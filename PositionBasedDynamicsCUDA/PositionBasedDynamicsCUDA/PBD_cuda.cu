@@ -1069,13 +1069,13 @@ void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 	PBD_DEBUGTIME(m_pbdSolverTimer->GetFuncTime());
 }
 
-void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver, BufferVector3f& fixedBuffer)
+void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver)
 {
 	m_pbdSolverTimer->Tick();
 	switch (m_ht)
 	{
 	case CPU:
-		projectConstraintWithColliCPU(st, iterations, colliSolver, fixedBuffer);
+		projectConstraintWithColliCPU(st, iterations, colliSolver);
 		break;
 	case GPU:
 		projectConstraintGPU(st, iterations);
@@ -1126,9 +1126,8 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 }
 
 
-void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver, BufferVector3f& fixedBuffer)
+void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver)
 {
-	
 	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
 	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
 	auto massBuffer = &(m_pbdObj->massBuffer);
@@ -1167,7 +1166,7 @@ void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, Col
 			prdPBuffer->m_Data[i0] += dp1;
 			prdPBuffer->m_Data[i1] += dp2;
 		}
-		colliSolver->CollisionResolveNew(fixedBuffer);
+		colliSolver->CollisionResolve();
 		ColliWithShpGrd();
 	}
 }
