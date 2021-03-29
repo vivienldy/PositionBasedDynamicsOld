@@ -12,6 +12,7 @@ struct Contact
 {
 	enum Type { VF, EE, VFDCD } type;
 	//bool thicknessVF;
+	bool colliFreeDir;
 	float t; // time
 	double w[4];  // weight
 	float3 n; // normal
@@ -68,6 +69,7 @@ public:
 	void CCD_N2();
 	void CCD_SH();
 	void CollisionResolve();
+	void CollisionResolveNew(BufferVector3f& fixedBuffer, BufferVector3f& vFixedBuffer, BufferVector3f& fFixedBuffer, int debug, int iteration, int& debugFrameId);
 	void CollisionResolveWithoutItreation();
 	void SaveResult();
 	void CCD_N2Test();
@@ -103,7 +105,14 @@ private:
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
 		Contact ctx, int  i0, int i1, int i2, int i3);
+	void VFResolveNew(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
+		Contact& contact, int  i0, int i1, int i2, int i3, 
+		BufferVector3f& fixedBuffer, BufferVector3f& vFixedBuffer, BufferVector3f& fFixedBuffer, int debug, int iteration);
 	bool VFTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
+		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
+		Contact& contact, int i0, int i1, int i2, int i3);
+	bool VFResolveTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
 		float3 vtx_p, float3 p1_p, float3 p2_p, float3 p3_p,
 		Contact& contact, int i0, int i1, int i2, int i3);
 	bool VFDCDTest(float3 vtx_o, float3 p1_o, float3 p2_o, float3 p3_o,
@@ -152,6 +161,11 @@ float Point2Plane(float3 vtx, float3 p1, float3 p2, float3 p3);
 float3 pos(const float3 pos, const float3 prdPos, double t);
 float3 BarycentricCoord(float3 pos, float3 p0, float3 p1, float3 p2);
 
+//inline float Distance(float3 p1, float3 p2)
+//{
+//	return powf(powf((p1.x - p2.x), 2) + powf((p1.y - p2.y), 2) + powf((p1.z - p2.z), 2), 0.5);
+//}
+
 inline auto stp(const float3& u, const float3& v, const float3& w) -> decltype(dot(u, cross(v, w))) { return dot(u, cross(v, w)); }
 template <typename T> inline  T sgn(const T& x) { return x < 0 ? -1 : 1; }
 inline auto norm2(const float3& u)-> decltype(dot(u, u)) { return dot(u, u); }
@@ -161,10 +175,27 @@ template <typename T> inline T min(const T& a, const T& b, const T& c, const T& 
 // -------------- Data Orienated -------------------
 void CCD_SH(ContactData& contactData, SpatialHashSystem& shs, Topology meshTopol, BufferVector3f prdPBuffer, float thickness);
 bool VFTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact& contact, float thickness, int i0, int i1, int i2, int i3);
-bool VFDCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact& contact, float thickness);
-bool VFCCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact::Type type, Contact& contact, int i0, int i1, int i2, int i3);
+bool VFDCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact& contact, float thickness, int i0, int i1, int i2, int i3);
+bool VFCCDTest(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP, Contact::Type type, Contact& contact, float thickness, int i0, int i1, int i2, int i3);
 void CollisionResolve(Topology meshTopol, BufferVector3f& prdPBuffer, ContactData contactData, int itereations, float thickness, int& debugFrameId, BufferInt& vfIndices, BufferInt& resolveTimes);
 void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos, float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,Contact contact, float thickness, BufferInt& resolveTimes, int i0, int i1, int i2, int i3);
+void VFResolveNew(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3& vtxPrdP, float3& p1PrdP, float3& p2PrdP, float3& p3PrdP,
+	Contact contact, float thickness, 
+	int i0, int i1, int i2, int i3);
+bool VFResolveTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	Contact& contact, int i0, int i1, int i2, int i3, float thickness);
+void CollisionResolveNew(
+	Topology meshTopol,
+	BufferVector3f& prdPBuffer,
+	ContactData contactData,
+	int itereations, // for later resolve iteration times
+	float thickness,
+	int& debugFrameId,
+	BufferInt& vfIndices);
 // for collision test 
 void readMeshFromTxt(string filename, Topology& topol);
 void readBufferFromTxt(string filename, BufferVector3f& prdPBuffer);
