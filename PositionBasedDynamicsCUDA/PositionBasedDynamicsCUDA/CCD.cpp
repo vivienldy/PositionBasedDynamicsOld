@@ -45,7 +45,8 @@ float Point2Plane(float3 vtx, float3 p1, float3 p2, float3 p3)
 
 // Solving cubic equations
 // solves a x^3 + b x^2 + c x + d == 0
-int solve_cubic(double a, double b, double c, double d, double x[3]) {
+int solve_cubic(double a, double b, double c, double d, double x[3]) 
+{
 	double xc[2];
 	int ncrit = solve_quadratic(3 * a, 2 * b, c, xc);
 	if (ncrit == 0) {
@@ -127,9 +128,151 @@ float3 BarycentricCoord(float3 pos, float3 p0, float3 p1, float3 p2)
 	float w = 1 - u - v;
 	return make_float3(u, v, w);
 }
-// -------------------------- Collision Solver--------------------------------------
-// ------------- new method -------------
 
+bool IsDuplicated(BufferInt2& primList, BufferInt& indices, int i0, int i1, int i2, int i3)
+{
+	for (int i = 0; i < primList.GetSize(); ++i)
+	{
+		int idx = primList.m_Data[i].x;
+		int vIdx = indices.m_Data[idx];
+		int fIdx1 = indices.m_Data[idx + 1];
+		int fIdx2 = indices.m_Data[idx + 2];
+		int fIdx3 = indices.m_Data[idx + 3];
+		if (vIdx == i0 && fIdx1 == i1 && fIdx2 == i2 && fIdx3 == i3)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+// -------------------------- Collision Solver--------------------------------------
+bool CollisionSolver::ExtendedVFTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	Contact& contact, int i0, int i1, int i2, int i3)
+{
+	if (i0 == i1 || i0 == i2 || i0 == i3)
+		return false;
+	const float3& x0 = vtxPos, v0 = vtxPrdP - x0;  // x0: V's pos   v0: V's prdPos - pos
+	float3 x1 = p1Pos - x0, x2 = p2Pos - x0, x3 = p3Pos - x0; // x: p's pos - V's pos
+	float3 v1 = (p1PrdP - p1Pos) - v0, v2 = (p2PrdP - p2Pos) - v0, v3 = (p3PrdP - p3Pos) - v0; // v: (p's prdPos - p's pos) - v0
+	double a0 = stp(x1, x2, x3), a1 = stp(v1, x2, x3) + stp(x1, v2, x3) + stp(x1, x2, v3), a2 = stp(x1, v2, v3) + stp(v1, x2, v3) + stp(v1, v2, x3), a3 = stp(v1, v2, v3);
+	double t[5];
+	int nsol = solve_cubic(a3, a2, a1, a0, t); // number of solution
+	t[nsol] = 1; // also check at end of timestep
+	t[nsol + 1] = 0;
+	sort(t, t + 5);
+	for (int i = 0; i < nsol; i++)
+	{
+		if (t[i] < 0 || t[i] > 1)
+			continue;
+		contact.t = t[i];
+		float3 colliPos0 = pos(vtxPos, vtxPrdP, t[i]), colliPos1 = pos(p1Pos, p1PrdP, t[i]), colliPos2 = pos(p2Pos, p2PrdP, t[i]), colliPos3 = pos(p3Pos, p3PrdP, t[i]);
+		contact.n = normalize(cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP));
+		float3 colliN = normalize(cross(colliPos2 - colliPos1, colliPos3 - colliPos1));
+		double dist;
+		dist = dot(colliPos0 - colliPos1, colliN);
+		float3 weight;
+		weight = BarycentricCoord(colliPos0, colliPos1, colliPos2, colliPos3);
+		contact.w[0] = 1;
+		contact.w[1] = weight.x;
+		contact.w[2] = weight.y;
+		contact.w[3] = weight.z;
+		float edge1 = IO::Distance(colliPos1, colliPos2), edge2 = IO::Distance(colliPos1, colliPos3), edge3 = IO::Distance(colliPos2, colliPos3); // Distance funtion declear many times
+		float epsilon = m_thickness / ((edge1 + edge2 + edge3) / 3.0);
+		bool inside;
+		if (__USE_EPSILON)
+		{
+			bool inside1 = (weight.x <= (1 + epsilon)) && (weight.x >= (-epsilon));
+			bool inside2 = (weight.y <= (1 + epsilon)) && (weight.y >= (-epsilon));
+			bool inside3 = (weight.z <= (1 + epsilon)) && (weight.z >= (-epsilon));
+			if (inside1 && inside2 && inside3)
+			{
+				inside = true;
+			}
+			else
+			{
+				inside = false;
+			}
+		}
+		else
+		{
+			inside = (min(weight.x, weight.y, weight.z) >= 1e-6);
+		}
+		if ((abs(dist) - 2.0f * m_thickness < -1e-6) && inside)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void CollisionSolver::CCD_SH_Extended()
+{
+	m_ccdSolverTimer->Tick();
+	contactData.ctxs.m_Data.clear();
+	contactData.ctxStartNum.m_Data.clear();
+	contactData.ctxIndices.m_Data.clear();
+	m_shs->UpdateSH(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	auto indices = &(m_pbdObj->meshTopol.indices);
+	auto posBuffer = &(m_pbdObj->meshTopol.posBuffer);
+	auto triList = &(m_pbdObj->meshTopol.primList);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	BufferInt neighborList;   // reserved for SH Find neighbor results
+	float3 vtxPos, triPos1, triPos2, triPos3, vtxPrdP, triPrdP1, triPrdP2, triPrdP3;
+	int i0, i1, i2, i3;
+	// for collision debugging
+	m_nContact.m_Data.clear();
+	for (int triId = 0; triId < triList->GetSize(); ++triId)
+	{
+		// for collision detection
+
+		neighborList.m_Data.clear();
+		int start = triList->m_Data[triId].x;
+		int num = triList->m_Data[triId].y;
+		m_shs->FindNeighbors(neighborList, triId);
+		for (int vtxId = start; vtxId < start + num; ++vtxId)
+		{
+			i0 = indices->m_Data[vtxId];
+			vtxPos = posBuffer->m_Data[i0];
+			vtxPrdP = prdPBuffer->m_Data[i0];
+			for (int nbIdx = 0; nbIdx < neighborList.GetSize(); ++nbIdx)
+			{
+				int nbtriId = neighborList.m_Data[nbIdx];
+				int start = triList->m_Data[nbtriId].x;
+				i1 = indices->m_Data[start];
+				i2 = indices->m_Data[start + 1];
+				i3 = indices->m_Data[start + 2];
+				triPos1 = posBuffer->m_Data[i1];
+				triPos2 = posBuffer->m_Data[i2];
+				triPos3 = posBuffer->m_Data[i3];
+				triPrdP1 = prdPBuffer->m_Data[i1];
+				triPrdP2 = prdPBuffer->m_Data[i2];
+				triPrdP3 = prdPBuffer->m_Data[i3];
+				Contact contact;
+				if (ExtendedVFTest(vtxPos, triPos1, triPos2, triPos3, vtxPrdP, triPrdP1, triPrdP2, triPrdP3, contact, i0, i1, i2, i3))
+				{
+					bool isAlreadyContact = IsDuplicated(contactData.ctxStartNum, contactData.ctxIndices, i0, i1, i2, i3);
+					if (!isAlreadyContact)
+					{
+						contact.type = Contact::VF;
+						contactData.ctxs.m_Data.push_back(contact);
+						contactData.ctxStartNum.m_Data.push_back(make_int2(contactData.ctxIndices.GetSize(), 4));
+						contactData.ctxIndices.m_Data.push_back(i0);
+						contactData.ctxIndices.m_Data.push_back(i1);
+						contactData.ctxIndices.m_Data.push_back(i2);
+						contactData.ctxIndices.m_Data.push_back(i3);
+					}
+					else
+						continue;					
+				}
+			}
+		}
+	}
+	m_ccdSolverTimer->Tock();
+	PBD_DEBUGTIME(m_ccdSolverTimer->GetFuncTime());
+}
+// ------------- new method -------------
 bool CollisionSolver::VFResolveTest(
 	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
@@ -146,7 +289,7 @@ bool CollisionSolver::VFResolveTest(
 		return false;
 	}
 	float dist = dot(vtxPrdP - p1PrdP, prdPN * (colliFreeDir ? 1 : -1)) - 2.0 * m_thickness;
-	if (dist >=0)
+	if (dist >= -1e-6)
 	{
 		return false;
 	}
@@ -1166,6 +1309,76 @@ void CollisionSolver::SaveCollision(string path)
 	//contactData.Save(ofs);
 }
 
+void CollisionSolver::SaveContact(string path)
+{
+	std::ofstream ofs(path);
+	if (!ofs.is_open())
+		return;
+	printf("Saving Constact...\n");
+	printf("contactVFMap size %d, contactVHitMap size %d\n", m_contactVFMap.size(), m_contactVHitMap.size());
+	assert(m_contactVFMap.size() == m_contactVHitMap.size());
+	map<int, std::set<int>>::iterator it;
+	map<int, BufferVector3f>::iterator it2;
+	for (it = m_contactVFMap.begin(), it2 = m_contactVHitMap.begin();
+		it != m_contactVFMap.end() && it2 != m_contactVHitMap.end();
+		it++, it2++)
+	{
+		auto vertexId = it->first;
+		auto triIds = &(m_contactVFMap[vertexId]);
+		auto hitPos = &(m_contactVHitMap[vertexId]);
+		ofs << vertexId << ":";
+		int i = 0;
+		for (std::set<int>::iterator itSet = triIds->begin();
+			itSet != triIds->end() && i < hitPos->GetSize();
+			++itSet, ++i)
+		{
+			float3 currHitPos = hitPos->m_Data[i];
+			ofs << (*itSet) << ",";
+			ofs << currHitPos.x << "," << currHitPos.y << "," << currHitPos.z;
+		}
+		ofs << ";";
+	}
+	ofs << std::endl;
+
+	/*for (it2 = m_contactVHitMap.begin(); it2 != m_contactVHitMap.end(); it2++)
+	{
+		auto vertexId = it2->first;
+		auto hitPos = &(m_contactVHitMap[vertexId]);
+		ofs << vertexId << ":";
+		for (int i = 0; i < hitPos->GetSize(); ++i)
+		{
+			float3 currHitPos = hitPos->m_Data[i];
+			printf("%f %f %f ", currHitPos.x, currHitPos.y, currHitPos.z);
+			ofs << currHitPos.x << "," << currHitPos.y << "," << currHitPos.z;
+		}
+		ofs << ";";
+	}
+	ofs << std::endl;*/
+}
+
+void CollisionSolver::SavePrdPBeforeCCD(string path)
+{
+	Topology temp;
+	temp.indices = m_pbdObj->meshTopol.indices;
+	temp.primList = m_pbdObj->meshTopol.primList;
+	temp.posBuffer = beforeColliPrdPBuffer;
+	temp.indices.SetName("Indices");
+	temp.primList.SetName("primList");
+	temp.posBuffer.SetName("P");
+	IO::SaveToplogy(temp, path);
+}
+
+void CollisionSolver::SavePrdPAfterCCD(string path)
+{
+	Topology temp;
+	temp.indices = m_pbdObj->meshTopol.indices;
+	temp.primList = m_pbdObj->meshTopol.primList;
+	temp.posBuffer = afterColliPrdPBuffer;
+	temp.indices.SetName("Indices");
+	temp.primList.SetName("primList");
+	temp.posBuffer.SetName("P");
+	IO::SaveToplogy(temp, path);
+}
 //----------------------- CCDTest ----------------------------
 
 void CCDTest::PrepareTestData(string topolPath, string prdPath)
@@ -1305,7 +1518,653 @@ void ContactData::Save(std::ofstream& ofs)
 
 
 // ---------------- Data Oriented ----------------
+// ------------- new method ------------
+void CCD_SH_Extended(
+	ContactData& contactData,
+	SpatialHashSystem& shs,
+	Topology meshTopol, // 上一帧的collision free导出的meshtopol
+	BufferVector3f prdPBuffer,
+	float thickness)
+{
+	PBD_DEBUG;
+	contactData.ctxs.m_Data.clear();
+	contactData.ctxStartNum.m_Data.clear();
+	contactData.ctxIndices.m_Data.clear();
+	shs.UpdateSH(prdPBuffer);
+	auto indices = &(meshTopol.indices);
+	auto posBuffer = &(meshTopol.posBuffer);
+	auto triList = &(meshTopol.primList);
+	BufferInt neighborList;   // reserved for SH Find neighbor results
+	float3 vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP;
+	int i0, i1, i2, i3;
 
+	for (int triId = 0; triId < triList->GetSize(); ++triId)
+	{
+		// for collision detection
+		neighborList.m_Data.clear();
+		int start = triList->m_Data[triId].x;
+		int num = triList->m_Data[triId].y;
+		shs.FindNeighbors(neighborList, triId);
+
+		for (int vtxId = start; vtxId < start + num; ++vtxId)
+		{
+			i0 = indices->m_Data[vtxId];
+			vtxPos = posBuffer->m_Data[i0];
+			vtxPrdP = prdPBuffer.m_Data[i0];
+			for (int nbIdx = 0; nbIdx < neighborList.GetSize(); ++nbIdx)
+			{
+				int nbtriId = neighborList.m_Data[nbIdx];
+				int start = triList->m_Data[nbtriId].x;
+				i1 = indices->m_Data[start];
+				i2 = indices->m_Data[start + 1];
+				i3 = indices->m_Data[start + 2];
+				p1Pos = posBuffer->m_Data[i1];
+				p2Pos = posBuffer->m_Data[i2];
+				p3Pos = posBuffer->m_Data[i3];
+				p1PrdP = prdPBuffer.m_Data[i1];
+				p2PrdP = prdPBuffer.m_Data[i2];
+				p3PrdP = prdPBuffer.m_Data[i3];
+				Contact contact;
+				if (ExtendedVFTest(vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP, contact, thickness, i0, i1, i2, i3))
+				{
+					bool isAlreadyContact = IsDuplicated(contactData.ctxStartNum, contactData.ctxIndices, i0, i1, i2, i3);
+					if (!isAlreadyContact)
+					{
+						contact.type = Contact::VF;
+						contactData.ctxs.m_Data.push_back(contact);
+						contactData.ctxStartNum.m_Data.push_back(make_int2(contactData.ctxIndices.GetSize(), 4));
+						contactData.ctxIndices.m_Data.push_back(i0);
+						contactData.ctxIndices.m_Data.push_back(i1);
+						contactData.ctxIndices.m_Data.push_back(i2);
+						contactData.ctxIndices.m_Data.push_back(i3);
+					}
+					else
+						continue;
+				}
+			}
+		}
+	}
+}
+void CCD_SH_Narrow(
+	ContactData& contactData,
+	SpatialHashSystem& shs,
+	Topology meshTopol, // 上一帧的collision free导出的meshtopol
+	BufferVector3f prdPBuffer,
+	float thickness) // no contact visualization 
+{
+	PBD_DEBUG;
+	contactData.ctxs.m_Data.clear();
+	contactData.ctxStartNum.m_Data.clear();
+	contactData.ctxIndices.m_Data.clear();
+	shs.UpdateSH(prdPBuffer);
+	auto indices = &(meshTopol.indices);
+	auto posBuffer = &(meshTopol.posBuffer);
+	auto triList = &(meshTopol.primList);
+	BufferInt neighborList;   // reserved for SH Find neighbor results
+	float3 vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP;
+	int i0, i1, i2, i3;
+
+	for (int triId = 0; triId < triList->GetSize(); ++triId)
+	{
+		// for collision detection
+		neighborList.m_Data.clear();
+		int start = triList->m_Data[triId].x;
+		int num = triList->m_Data[triId].y;
+		shs.FindNeighbors(neighborList, triId);
+
+		for (int vtxId = start; vtxId < start + num; ++vtxId)
+		{
+			i0 = indices->m_Data[vtxId];
+			vtxPos = posBuffer->m_Data[i0];
+			vtxPrdP = prdPBuffer.m_Data[i0];
+			for (int nbIdx = 0; nbIdx < neighborList.GetSize(); ++nbIdx)
+			{
+				int nbtriId = neighborList.m_Data[nbIdx];
+				int start = triList->m_Data[nbtriId].x;
+				i1 = indices->m_Data[start];
+				i2 = indices->m_Data[start + 1];
+				i3 = indices->m_Data[start + 2];
+				p1Pos = posBuffer->m_Data[i1];
+				p2Pos = posBuffer->m_Data[i2];
+				p3Pos = posBuffer->m_Data[i3];
+				p1PrdP = prdPBuffer.m_Data[i1];
+				p2PrdP = prdPBuffer.m_Data[i2];
+				p3PrdP = prdPBuffer.m_Data[i3];
+				Contact contact;
+				if (NarrowVFCCDTest(vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP, contact, thickness, i0, i1, i2, i3))
+				{
+					bool isAlreadyContact = IsDuplicated(contactData.ctxStartNum, contactData.ctxIndices, i0, i1, i2, i3);
+					if (!isAlreadyContact)
+					{
+						contact.type = Contact::VF;
+						contactData.ctxs.m_Data.push_back(contact);
+						contactData.ctxStartNum.m_Data.push_back(make_int2(contactData.ctxIndices.GetSize(), 4));
+						contactData.ctxIndices.m_Data.push_back(i0);
+						contactData.ctxIndices.m_Data.push_back(i1);
+						contactData.ctxIndices.m_Data.push_back(i2);
+						contactData.ctxIndices.m_Data.push_back(i3);
+					}
+					else
+						continue;
+				}
+			}
+		}
+	}
+}
+void CCD_SH_Narrow(
+	ContactData& contactData,
+	SpatialHashSystem& shs,
+	Topology meshTopol, // 上一帧的collision free导出的meshtopol
+	BufferVector3f prdPBuffer,
+	float thickness,
+	std::map<int, std::set<int>>& contactVFMap,
+	std::map<int, BufferVector3f>& contactVHitMap)
+{
+	PBD_DEBUG;
+	contactData.ctxs.m_Data.clear();
+	contactData.ctxStartNum.m_Data.clear();
+	contactData.ctxIndices.m_Data.clear();
+	shs.UpdateSH(prdPBuffer);
+	auto indices = &(meshTopol.indices);
+	auto posBuffer = &(meshTopol.posBuffer);
+	auto triList = &(meshTopol.primList);
+	BufferInt neighborList;   // reserved for SH Find neighbor results
+	float3 vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP;
+	int i0, i1, i2, i3;
+
+	for (int triId = 0; triId < triList->GetSize(); ++triId)
+	{
+		// for collision detection
+		neighborList.m_Data.clear();
+		int start = triList->m_Data[triId].x;
+		int num = triList->m_Data[triId].y;
+		shs.FindNeighbors(neighborList, triId);
+
+		for (int vtxId = start; vtxId < start + num; ++vtxId)
+		{
+			i0 = indices->m_Data[vtxId];
+			vtxPos = posBuffer->m_Data[i0];
+			vtxPrdP = prdPBuffer.m_Data[i0];
+			for (int nbIdx = 0; nbIdx < neighborList.GetSize(); ++nbIdx)
+			{
+				int nbtriId = neighborList.m_Data[nbIdx];
+				int start = triList->m_Data[nbtriId].x;
+				i1 = indices->m_Data[start];
+				i2 = indices->m_Data[start + 1];
+				i3 = indices->m_Data[start + 2];
+				p1Pos = posBuffer->m_Data[i1];
+				p2Pos = posBuffer->m_Data[i2];
+				p3Pos = posBuffer->m_Data[i3];
+				p1PrdP = prdPBuffer.m_Data[i1];
+				p2PrdP = prdPBuffer.m_Data[i2];
+				p3PrdP = prdPBuffer.m_Data[i3];
+				Contact contact;
+				if (NarrowVFCCDTest(vtxPos, p1Pos, p2Pos, p3Pos, vtxPrdP, p1PrdP, p2PrdP, p3PrdP, contact, thickness, i0, i1, i2, i3))
+				{
+					bool isAlreadyContact = IsDuplicated(contactData.ctxStartNum, contactData.ctxIndices, i0, i1, i2, i3);
+					if (!isAlreadyContact)
+					{
+						
+						float3 hitPos = pos(vtxPos, vtxPrdP, contact.t);
+						//printf("contact time 1:%f\n", contact.t);
+						//printInfo("colliPos", hitPos);
+						//printf("-------------------------\n");
+						auto insert = contactVFMap[i0].insert(nbtriId);
+						if (insert.second)  // never inserted before
+						{
+							contactVHitMap[i0].m_Data.push_back(hitPos);
+						}
+						contact.type = Contact::VF;
+						contactData.ctxs.m_Data.push_back(contact);
+						contactData.ctxStartNum.m_Data.push_back(make_int2(contactData.ctxIndices.GetSize(), 4));
+						contactData.ctxIndices.m_Data.push_back(i0);
+						contactData.ctxIndices.m_Data.push_back(i1);
+						contactData.ctxIndices.m_Data.push_back(i2);
+						contactData.ctxIndices.m_Data.push_back(i3);
+					}
+					else
+						continue;
+				}
+			}
+		}
+	}
+}
+
+bool ExtendedVFTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	Contact& contact, float thickness, int i0, int i1, int i2, int i3)
+{
+	if (i0 == i1 || i0 == i2 || i0 == i3)
+		return false;
+	const float3& x0 = vtxPos, v0 = vtxPrdP - x0;  // x0: V's pos   v0: V's prdPos - pos
+	float3 x1 = p1Pos - x0, x2 = p2Pos - x0, x3 = p3Pos - x0; // x: p's pos - V's pos
+	float3 v1 = (p1PrdP - p1Pos) - v0, v2 = (p2PrdP - p2Pos) - v0, v3 = (p3PrdP - p3Pos) - v0; // v: (p's prdPos - p's pos) - v0
+	double a0 = stp(x1, x2, x3), a1 = stp(v1, x2, x3) + stp(x1, v2, x3) + stp(x1, x2, v3), a2 = stp(x1, v2, v3) + stp(v1, x2, v3) + stp(v1, v2, x3), a3 = stp(v1, v2, v3);
+	double t[5];
+	int nsol = solve_cubic(a3, a2, a1, a0, t); // number of solution
+	t[nsol] = 1; // also check at end of timestep
+	t[nsol + 1] = 0;
+	std::sort(t, (t + nsol+2));
+	for (int i = 0; i < (nsol+2); i++)
+	{
+		if (t[i] < 0 || t[i] > 1)
+			continue;
+		contact.t = t[i];
+		float3 colliPos0 = pos(vtxPos, vtxPrdP, t[i]), colliPos1 = pos(p1Pos, p1PrdP, t[i]), colliPos2 = pos(p2Pos, p2PrdP, t[i]), colliPos3 = pos(p3Pos, p3PrdP, t[i]);
+		contact.n = normalize(cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP));
+		float3 colliN = normalize(cross(colliPos2 - colliPos1, colliPos3 - colliPos1));
+		double dist;
+		dist = dot(colliPos0 - colliPos1, colliN);
+		float3 weight;
+		weight = BarycentricCoord(colliPos0, colliPos1, colliPos2, colliPos3);
+		contact.w[0] = 1;
+		contact.w[1] = weight.x;
+		contact.w[2] = weight.y;
+		contact.w[3] = weight.z;
+		bool inside;
+		if (__USE_EPSILON)
+		{
+			float edge1 = IO::Distance(colliPos1, colliPos2), edge2 = IO::Distance(colliPos1, colliPos3), edge3 = IO::Distance(colliPos2, colliPos3); // Distance funtion declear many times
+			float epsilon = thickness / ((edge1 + edge2 + edge3) / 3.0);
+			bool inside1 = (weight.x <= (1 + epsilon)) && (weight.x >= (-epsilon));
+			bool inside2 = (weight.y <= (1 + epsilon)) && (weight.y >= (-epsilon));
+			bool inside3 = (weight.z <= (1 + epsilon)) && (weight.z >= (-epsilon));
+			if (inside1 && inside2 && inside3)
+			{
+				inside = true;
+			}
+			else
+			{
+				inside = false;
+			}
+		}
+		else
+		{
+			inside = (min(weight.x, weight.y, weight.z) >= 1e-6);
+		}
+		//if (i0 == 264 && (i1 == 62 || i1 == 184 || i1 == 198) && (i2 == 62 || i2 == 184 || i2 == 198) && (i3 == 62 || i3 == 184 || i3 == 198))
+		/*if (i0 == 704 && i1 == 332 && i2 == 1171 && i3 == 280)
+		{
+			printf("v: %d, f: %d %d %d\n", i0, i1, i2, i3);
+			printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+				vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+				vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p1PrdP.x, p1PrdP.y, p1PrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z,
+				contact.t);
+			printf("w: (%f, %f, %f)\n", weight.x, weight.y, weight.z);
+			cout << "inside: " << inside << endl;
+			printf("contact t: %f\n", t[i]);
+			printf("d :%f\n", abs(dist) - 2 * thickness);
+			printf("------------------------------------------------------------\n");
+		}*/
+		if ((abs(dist)  - 2.0f * thickness < -1e-6) && inside)
+		{
+			//if (i0 == 704 && i1 == 332 && i2 == 1171 && i3 == 280)
+			//	printf("------------------t%f-------------\n", t[i]);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool NarrowVFCCDTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	 Contact& contact, float thickness, int i0, int i1, int i2, int i3)
+{
+	if (i0 == i1 || i0 == i2 || i0 == i3)
+		return false;
+	const float3& x0 = vtxPos, v0 = vtxPrdP - x0;  // x0: V's pos   v0: V's prdPos - pos
+	float3 x1 = p1Pos - x0, x2 = p2Pos - x0, x3 = p3Pos - x0; // x: p's pos - V's pos
+	float3 v1 = (p1PrdP - p1Pos) - v0, v2 = (p2PrdP - p2Pos) - v0, v3 = (p3PrdP - p3Pos) - v0; // v: (p's prdPos - p's pos) - v0
+	double a0 = stp(x1, x2, x3), a1 = stp(v1, x2, x3) + stp(x1, v2, x3) + stp(x1, x2, v3), a2 = stp(x1, v2, v3) + stp(v1, x2, v3) + stp(v1, v2, x3), a3 = stp(v1, v2, v3);
+	double t[4];
+	int nsol = solve_cubic(a3, a2, a1, a0, t); // number of solution
+	t[nsol] = 1; // also check at end of timestep
+	for (int i = 0; i < nsol; i++)
+	{
+		if (t[i] < 0 || t[i] > 1)
+		{
+			continue;
+		}
+		contact.t = t[i];
+		float3 colliPos0 = pos(vtxPos, vtxPrdP, t[i]), colliPos1 = pos(p1Pos, p1PrdP, t[i]), colliPos2 = pos(p2Pos, p2PrdP, t[i]), colliPos3 = pos(p3Pos, p3PrdP, t[i]);
+		double d; // is vtx on tirangle
+		bool inside;
+		float3 weight;
+		contact.n = normalize(cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP));
+		float3 cn = normalize(cross(colliPos2 - colliPos1, colliPos3 - colliPos1));
+		d = dot(colliPos0 - colliPos1, cn);
+		weight = BarycentricCoord(colliPos0, colliPos1, colliPos2, colliPos3);
+		contact.w[0] = 1;
+		contact.w[1] = weight.x;
+		contact.w[2] = weight.y;
+		contact.w[3] = weight.z;
+		if (__USE_EPSILON)
+		{
+			float edge1 = IO::Distance(p1PrdP,p2PrdP), edge2 = IO::Distance(p1PrdP, p3PrdP), edge3 = IO::Distance(p2PrdP, p3PrdP); // Distance funtion declear many times
+			float epsilon = thickness / ((edge1 + edge2 + edge3) / 3.0);
+			bool inside1 = (weight.x <= (1 + epsilon)) && (weight.x >=(-epsilon));
+			bool inside2 = (weight.y <= (1 + epsilon)) && (weight.y >=(-epsilon));
+			bool inside3 = (weight.z <= (1 + epsilon)) && (weight.z >=(-epsilon));
+			if (inside1 && inside2 && inside3)
+			{
+				inside = true;
+			}
+			else
+			{
+				inside = false;
+			}
+		}
+		else
+		{
+			inside = (min(weight.x, weight.y, weight.z) >= 1e-6);
+		}
+		if (abs(d) < 1e-6 && inside)
+		{
+			//printf("contact time 0: %f\n", t[i]);
+			//printInfo("colliPos", colliPos0);
+			//printf("------------\n");
+			return true;
+		}
+	}
+	return false;
+}
+
+void CollisionResolveNew(
+	Topology meshTopol,
+	BufferVector3f& prdPBuffer,
+	ContactData contactData,
+	int itereations, // for later resolve iteration times
+	float thickness,
+	int& debugFrameId,
+	BufferInt& vfIndices)
+{
+	PBD_DEBUG;
+	//if (debugFrameId == 1)
+	//{
+	//	string path = "D://0319CCDTest//continueSimData//testData//test." + to_string(debugFrameId) + ".cache";
+	//	Topology temp;
+	//	temp.indices = meshTopol.indices;
+	//	temp.primList = meshTopol.primList;
+	//	temp.posBuffer = meshTopol.posBuffer;
+	//	temp.indices.SetName("Indices");
+	//	temp.primList.SetName("primList");
+	//	temp.posBuffer.SetName("P");
+	//	IO::SaveToplogy(temp, path);
+	//	printf("------------------------------------------m_debugFrameID %d save-------------------------------------\n", debugFrameId);
+	//}
+	for (int i = 0; i < itereations; ++i) // change 2 to iterations
+	{
+		Contact contact;
+		int start, i0, i1, i2, i3;
+		float3 vtxPos, p1Pos, p2Pos, p3Pos;
+		auto ctxIndices = &(contactData.ctxIndices);
+		auto ctxStartNum = &(contactData.ctxStartNum);
+		auto ctxList = &(contactData.ctxs);
+		auto posBuffer = &(meshTopol.posBuffer);
+		for (int ctxId = 0; ctxId < ctxList->GetSize(); ++ctxId)
+		{
+			contact = ctxList->m_Data[ctxId];
+			start = ctxStartNum->m_Data[ctxId].x;
+			i0 = ctxIndices->m_Data[start];
+			i1 = ctxIndices->m_Data[start + 1];
+			i2 = ctxIndices->m_Data[start + 2];
+			i3 = ctxIndices->m_Data[start + 3];
+			vtxPos = posBuffer->m_Data[i0];
+			p1Pos = posBuffer->m_Data[i1];
+			p2Pos = posBuffer->m_Data[i2];
+			p3Pos = posBuffer->m_Data[i3];
+			if (Contact::VF || Contact::VFDCD)
+			{
+				if (VFResolveTest(
+					vtxPos, p1Pos, p2Pos, p3Pos,
+					prdPBuffer.m_Data[i0], prdPBuffer.m_Data[i1], prdPBuffer.m_Data[i2], prdPBuffer.m_Data[i3],
+					contact,
+					i0, i1, i2, i3, thickness))
+				{
+	/*				if (i0 == 704 || i1 == 704 || i2 == 704 || i3 == 704)
+					{
+						printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
+						auto newDistance = Point2Plane(prdPBuffer.m_Data[i0], prdPBuffer.m_Data[i1], prdPBuffer.m_Data[i2], prdPBuffer.m_Data[i3]);
+						printf("distance: %f, 2*thickness: %f\n", newDistance, 2 * thickness);
+						printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+							vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+							prdPBuffer.m_Data[i0].x, prdPBuffer.m_Data[i0].y, prdPBuffer.m_Data[i0].z,
+							prdPBuffer.m_Data[i1].x, prdPBuffer.m_Data[i1].y, prdPBuffer.m_Data[i1].z,
+							prdPBuffer.m_Data[i2].x, prdPBuffer.m_Data[i2].y, prdPBuffer.m_Data[i2].z,
+							prdPBuffer.m_Data[i3].x, prdPBuffer.m_Data[i3].y, prdPBuffer.m_Data[i3].z);
+						printf("-------------\n");
+					}*/
+					VFResolveNew(vtxPos, p1Pos, p2Pos, p3Pos,
+						prdPBuffer.m_Data[i0], prdPBuffer.m_Data[i1], prdPBuffer.m_Data[i2], prdPBuffer.m_Data[i3],
+						contact, thickness, i0, i1, i2, i3);
+					vfIndices.m_Data.push_back(i0);
+					vfIndices.m_Data.push_back(i1);
+					vfIndices.m_Data.push_back(i2);
+					vfIndices.m_Data.push_back(i3);
+
+				/*	if (i0 == 704 || i1 == 704 || i2 == 704 || i3 == 704)
+					{
+						auto newDistance = Point2Plane(prdPBuffer.m_Data[i0], prdPBuffer.m_Data[i1], prdPBuffer.m_Data[i2], prdPBuffer.m_Data[i3]);
+						printf("distance: %f, 2*thickness: %f\n", newDistance, 2 * thickness);
+						printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+							vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+							prdPBuffer.m_Data[i0].x, prdPBuffer.m_Data[i0].y, prdPBuffer.m_Data[i0].z,
+							prdPBuffer.m_Data[i1].x, prdPBuffer.m_Data[i1].y, prdPBuffer.m_Data[i1].z,
+							prdPBuffer.m_Data[i2].x, prdPBuffer.m_Data[i2].y, prdPBuffer.m_Data[i2].z,
+							prdPBuffer.m_Data[i3].x, prdPBuffer.m_Data[i3].y, prdPBuffer.m_Data[i3].z);
+						printf("--------------------------------------------------------\n");
+					}*/
+					//if (i0 == 676 || i1 == 676 || i2 == 676 || i3 == 676)
+					//{
+					//	auto newDistance = Point2Plane(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i2], m_prdPBuffer->m_Data[i3]);
+					//	float3 nnn = normalize(cross(m_prdPBuffer->m_Data[i2] - m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i3] - m_prdPBuffer->m_Data[i1]));
+					//	bool ncRelatedPos = RelativePos(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], nnn);
+					//	printf("distance: %f, 2*thickness: %f\n", newDistance, 2 * m_thickness);
+					//	float3 n = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
+					//	bool fRelatedPos = RelativePos(vtxPos, p1Pos, n);
+					//	cout << "fRealtedPos: " << fRelatedPos << "  " << "cRealtedPos:" << ncRelatedPos << endl;
+					//	printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+					//		vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+					//		m_prdPBuffer->m_Data[i0].x, m_prdPBuffer->m_Data[i0].y, m_prdPBuffer->m_Data[i0].z,
+					//		m_prdPBuffer->m_Data[i1].x, m_prdPBuffer->m_Data[i1].y, m_prdPBuffer->m_Data[i1].z,
+					//		m_prdPBuffer->m_Data[i2].x, m_prdPBuffer->m_Data[i2].y, m_prdPBuffer->m_Data[i2].z,
+					//		m_prdPBuffer->m_Data[i3].x, m_prdPBuffer->m_Data[i3].y, m_prdPBuffer->m_Data[i3].z);
+					//	printf("---------------------------------------------------------------------------------------------\n");
+					//	/*debugFrameId++;
+					//	string path = "D://0324CCDTest//testData//test." + to_string(debugFrameId) + ".cache";
+
+					//	m_pbdObj->constrPBDBuffer.prdPBuffer.SetName("P");
+					//	Topology temp;
+					//	temp.indices = m_pbdObj->meshTopol.indices;
+					//	temp.primList = m_pbdObj->meshTopol.primList;
+					//	temp.posBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
+					//	temp.indices.SetName("Indices");
+					//	temp.primList.SetName("primList");
+					//	temp.posBuffer.SetName("P");
+					//	IO::SaveToplogy(temp, path);*/
+					//}
+				}
+				else
+					continue;
+			}
+		}
+	}
+}
+
+bool VFResolveTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	Contact& contact, int i0, int i1, int i2, int i3, float thickness)
+{
+	//if(i0==1010 && i1 == 1084 && i2 == 212 && i3 == 345)
+	float3 colliFreeN = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
+	bool colliFreeDir = RelativePos(vtxPos, p1Pos, colliFreeN);
+	//bool colliFreeDir = contact.colliFreeDir;
+	float3 prdPN = normalize(cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP));
+	float3 prdPn = cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP);
+	if (dot(prdPn, prdPn) <= 1e-6) // 如果三角形退化成一条线，就跳过这个三角形！！！
+	{
+
+		return false;
+	}
+	float dist = dot(vtxPrdP - p1PrdP, prdPN * (colliFreeDir ? 1 : -1));
+	float depth = dot(vtxPrdP - p1PrdP, prdPN * (colliFreeDir ? 1 : -1)) - 2.0 * thickness;
+	if (i0 == 1293 && i1 == 630 && i2 == 332 && i3 == 841)
+	{
+		printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
+		printf("dist: %f\n", dist);
+		printf("depth: %f\n", depth);
+		printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+			vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+			vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p1PrdP.x, p1PrdP.y, p1PrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z);
+		printf("----------in resolve test--------------\n");
+	}
+	if (depth >= -1e-6)
+	{
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+}
+
+void VFResolveNew(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3& vtxPrdP, float3& p1PrdP, float3& p2PrdP, float3& p3PrdP,
+	Contact contact, float thickness,
+	int i0, int i1, int i2, int i3)
+{
+	float3 vp = vtxPrdP, p1p = p1PrdP, p2p = p2PrdP, p3p = p3PrdP;
+	float3 crossColliFreeN = cross(p2Pos - p1Pos, p3Pos - p1Pos);
+	float3 colliFreeN = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
+	bool colliFreeDir = RelativePos(vtxPos, p1Pos, colliFreeN);
+	//bool colliFreeDir = contact.colliFreeDir;
+	float3 crossPrdPN = cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP);
+	float3 prdPN = normalize(cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP));
+	float3 p1ProjPrdP = p1PrdP + prdPN * (colliFreeDir ? 1 : -1) * 2.0 * thickness;
+	float depth = dot(p1ProjPrdP - vtxPrdP, (prdPN * (colliFreeDir ? 1 : -1))) * 0.5; // must > 0
+	if (i0 == 1293 && i1 == 630 && i2 == 332 && i3 == 841)
+	{
+		printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
+		printf("depth: %f\n", depth);
+		printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+			vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+			vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p1PrdP.x, p1PrdP.y, p1PrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z);
+		printf("-------------in resolve--------------\n");
+	}
+	float3 vtxFix = depth * (prdPN * (colliFreeDir ? 1 : -1));
+	float3 p1Fix = depth * (prdPN * (colliFreeDir ? -1 : 1));
+	float3 p2Fix = depth * (prdPN * (colliFreeDir ? -1 : 1));
+	float3 p3Fix = depth * (prdPN * (colliFreeDir ? -1 : 1));
+	/*
+	fixedBuffer.m_Data[i0] += vtxFix;
+	fixedBuffer.m_Data[i1] += p1Fix;
+	fixedBuffer.m_Data[i2] += p2Fix;
+	fixedBuffer.m_Data[i3] += p3Fix;
+	vFixedBuffer.m_Data[i0] += vtxFix;
+	fFixedBuffer.m_Data[i1] += p1Fix;
+	fFixedBuffer.m_Data[i2] += p2Fix;
+	fFixedBuffer.m_Data[i3] += p3Fix;
+	*/
+	float3 weight = BarycentricCoord(vtxPrdP, p1PrdP, p2PrdP, p3PrdP);
+	float sw = weight.x * weight.x + weight.y * weight.y + weight.z * weight.z;
+	vtxPrdP += vtxFix;
+	p1PrdP += p1Fix * weight.x / sw;
+	p2PrdP += p2Fix * weight.y / sw;
+	p3PrdP += p3Fix * weight.z / sw;
+	if (isnan(vtxPrdP.x) || isnan(vtxPrdP.y) || isnan(vtxPrdP.z) || isnan(p1PrdP.x) || isnan(p1PrdP.y) || isnan(p1PrdP.z) ||
+		isnan(p2PrdP.x) || isnan(p2PrdP.y) || isnan(p2PrdP.z) || isnan(p3PrdP.x) || isnan(p3PrdP.y) || isnan(p3PrdP.z))
+	{
+		printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
+		printInfo("weight:", weight);
+		printInfo("colliFreeN cross:", crossColliFreeN);
+		printInfo("prdpN cross:", crossPrdPN);
+		printf("------ depth:%f, sw: %f \n", depth, sw);
+		printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
+			vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
+			vp.x, vp.y, vp.z, p1p.x, p1p.y, p1p.z, p2p.x, p2p.y, p2p.z, p3p.x, p3p.y, p3p.z);
+	}
+}
+
+void SaveContact(
+	string path, 
+	std::map<int, std::set<int>>& contactVFMap,
+	std::map<int, BufferVector3f>& contactVHitMap)
+{
+	std::ofstream ofs(path);
+	if (!ofs.is_open())
+		return;
+	printf("Saving Constact...\n");
+	printf("contactVFMap size %d, contactVHitMap size %d\n", contactVFMap.size(), contactVHitMap.size());
+	assert(contactVFMap.size() == contactVHitMap.size());
+	map<int, std::set<int>>::iterator it;
+	map<int, BufferVector3f>::iterator it2;
+	for (it = contactVFMap.begin(), it2 = contactVHitMap.begin();
+		it != contactVFMap.end() && it2 != contactVHitMap.end();
+		it++, it2++)
+	{
+		auto vertexId = it->first;
+		auto triIds = &(contactVFMap[vertexId]);
+		auto hitPos = &(contactVHitMap[vertexId]);
+		assert(triIds->size() == hitPos->GetSize());
+		ofs << vertexId << ":";
+		int i = 0;
+		for (std::set<int>::iterator itSet = triIds->begin();
+			itSet != triIds->end() && i < hitPos->GetSize();
+			++itSet, ++i)
+		{
+			float3 currHitPos = hitPos->m_Data[i];
+			ofs << (*itSet) << ",";
+			ofs << currHitPos.x << "," << currHitPos.y << "," << currHitPos.z << ",";
+		}
+		ofs << ";";
+	}
+	ofs << std::endl;
+
+	/*for (it2 = m_contactVHitMap.begin(); it2 != m_contactVHitMap.end(); it2++)
+	{
+		auto vertexId = it2->first;
+		auto hitPos = &(m_contactVHitMap[vertexId]);
+		ofs << vertexId << ":";
+		for (int i = 0; i < hitPos->GetSize(); ++i)
+		{
+			float3 currHitPos = hitPos->m_Data[i];
+			printf("%f %f %f ", currHitPos.x, currHitPos.y, currHitPos.z);
+			ofs << currHitPos.x << "," << currHitPos.y << "," << currHitPos.z;
+		}
+		ofs << ";";
+	}
+	ofs << std::endl;*/
+}
+
+void SavePrdPBeforeCCD(string path, Topology meshTopol, BufferVector3f prdP)
+{
+	Topology temp;
+	temp.indices = meshTopol.indices;
+	temp.primList = meshTopol.primList;
+	temp.posBuffer = prdP;
+	temp.indices.SetName("Indices");
+	temp.primList.SetName("primList");
+	temp.posBuffer.SetName("P");
+	IO::SaveToplogy(temp, path);
+}
+
+void SavePrdPAfterCCD(string path, Topology meshTopol, BufferVector3f prdP)
+{
+	Topology temp;
+	temp.indices = meshTopol.indices;
+	temp.primList = meshTopol.primList;
+	temp.posBuffer = prdP;
+	temp.indices.SetName("Indices");
+	temp.primList.SetName("primList");
+	temp.posBuffer.SetName("P");
+	IO::SaveToplogy(temp, path);
+}
+
+// ------------- old method ------------
 void CCD_SH(
 	ContactData& contactData,
 	SpatialHashSystem& shs,
@@ -1821,209 +2680,7 @@ void VFResolve(
 		p3Prd += n * dp * weight.z / sw;
 	}
 }
-// ---------new method--------------
-void CollisionResolveNew(
-	Topology meshTopol,
-	BufferVector3f& prdPBuffer,
-	ContactData contactData,
-	int itereations, // for later resolve iteration times
-	float thickness,
-	int& debugFrameId,
-	BufferInt& vfIndices)
-{
-	PBD_DEBUG;
-	//if (debugFrameId == 1)
-	//{
-	//	string path = "D://0319CCDTest//continueSimData//testData//test." + to_string(debugFrameId) + ".cache";
-	//	Topology temp;
-	//	temp.indices = meshTopol.indices;
-	//	temp.primList = meshTopol.primList;
-	//	temp.posBuffer = meshTopol.posBuffer;
-	//	temp.indices.SetName("Indices");
-	//	temp.primList.SetName("primList");
-	//	temp.posBuffer.SetName("P");
-	//	IO::SaveToplogy(temp, path);
-	//	printf("------------------------------------------m_debugFrameID %d save-------------------------------------\n", debugFrameId);
-	//}
-	for (int i = 0; i < itereations; ++i) // change 2 to iterations
-	{
-		Contact contact;
-		int start, i0, i1, i2, i3;
-		float3 vtxPos, p1Pos, p2Pos, p3Pos;
-		auto ctxIndices = &(contactData.ctxIndices);
-		auto ctxStartNum = &(contactData.ctxStartNum);
-		auto ctxList = &(contactData.ctxs);
-		auto posBuffer = &(meshTopol.posBuffer);
-		for (int ctxId = 0; ctxId < ctxList->GetSize(); ++ctxId)
-		{
-			contact = ctxList->m_Data[ctxId];
-			start = ctxStartNum->m_Data[ctxId].x;
-			i0 = ctxIndices->m_Data[start];
-			i1 = ctxIndices->m_Data[start + 1];
-			i2 = ctxIndices->m_Data[start + 2];
-			i3 = ctxIndices->m_Data[start + 3];
-			vtxPos = posBuffer->m_Data[i0];
-			p1Pos = posBuffer->m_Data[i1];
-			p2Pos = posBuffer->m_Data[i2];
-			p3Pos = posBuffer->m_Data[i3];
-			if (Contact::VF || Contact::VFDCD)
-			{
-				if (VFResolveTest(
-					vtxPos, p1Pos, p2Pos, p3Pos,
-				    prdPBuffer.m_Data[i0], prdPBuffer.m_Data[i1], prdPBuffer.m_Data[i2], prdPBuffer.m_Data[i3],
-					contact,
-					i0, i1, i2, i3, thickness))
-				{
-				/*	if (i0 == 676 || i1 == 676 || i2 == 676 || i3 == 676)
-					{
-						printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
-						auto distance = Point2Plane(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i2], m_prdPBuffer->m_Data[i3]);
-						float3 n = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
-						bool fRelatedPos = RelativePos(vtxPos, p1Pos, n);
-						float3 nn = normalize(cross(m_prdPBuffer->m_Data[i2] - m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i3] - m_prdPBuffer->m_Data[i1]));
-						bool cRelatedPos = RelativePos(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], nn);
-						printf("distance: %f, 2*thickness: %f\n", distance, 2 * thickness);
-						cout << "fRealtedPos: " << fRelatedPos << "  " << "cRealtedPos:" << cRelatedPos << endl;
-						printf("-----------------------------------\n");
-					}*/
-					VFResolveNew(vtxPos, p1Pos, p2Pos, p3Pos,
-						prdPBuffer.m_Data[i0], prdPBuffer.m_Data[i1], prdPBuffer.m_Data[i2], prdPBuffer.m_Data[i3],
-						contact, thickness, i0, i1, i2, i3);
-					vfIndices.m_Data.push_back(i0);
-					vfIndices.m_Data.push_back(i1);
-					vfIndices.m_Data.push_back(i2);
-					vfIndices.m_Data.push_back(i3);
 
-					//if (i0 == 676 || i1 == 676 || i2 == 676 || i3 == 676)
-					//{
-					//	auto newDistance = Point2Plane(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i2], m_prdPBuffer->m_Data[i3]);
-					//	float3 nnn = normalize(cross(m_prdPBuffer->m_Data[i2] - m_prdPBuffer->m_Data[i1], m_prdPBuffer->m_Data[i3] - m_prdPBuffer->m_Data[i1]));
-					//	bool ncRelatedPos = RelativePos(m_prdPBuffer->m_Data[i0], m_prdPBuffer->m_Data[i1], nnn);
-					//	printf("distance: %f, 2*thickness: %f\n", newDistance, 2 * m_thickness);
-					//	float3 n = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
-					//	bool fRelatedPos = RelativePos(vtxPos, p1Pos, n);
-					//	cout << "fRealtedPos: " << fRelatedPos << "  " << "cRealtedPos:" << ncRelatedPos << endl;
-					//	printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
-					//		vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
-					//		m_prdPBuffer->m_Data[i0].x, m_prdPBuffer->m_Data[i0].y, m_prdPBuffer->m_Data[i0].z,
-					//		m_prdPBuffer->m_Data[i1].x, m_prdPBuffer->m_Data[i1].y, m_prdPBuffer->m_Data[i1].z,
-					//		m_prdPBuffer->m_Data[i2].x, m_prdPBuffer->m_Data[i2].y, m_prdPBuffer->m_Data[i2].z,
-					//		m_prdPBuffer->m_Data[i3].x, m_prdPBuffer->m_Data[i3].y, m_prdPBuffer->m_Data[i3].z);
-					//	printf("---------------------------------------------------------------------------------------------\n");
-					//	/*debugFrameId++;
-					//	string path = "D://0324CCDTest//testData//test." + to_string(debugFrameId) + ".cache";
-
-					//	m_pbdObj->constrPBDBuffer.prdPBuffer.SetName("P");
-					//	Topology temp;
-					//	temp.indices = m_pbdObj->meshTopol.indices;
-					//	temp.primList = m_pbdObj->meshTopol.primList;
-					//	temp.posBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
-					//	temp.indices.SetName("Indices");
-					//	temp.primList.SetName("primList");
-					//	temp.posBuffer.SetName("P");
-					//	IO::SaveToplogy(temp, path);*/
-					//}
-				}
-				else
-					continue;
-			}
-		}
-	}
-}
-
-bool VFResolveTest(
-	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
-	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
-	Contact& contact, int i0, int i1, int i2, int i3, float thickness)
-{
-	//if(i0==1010 && i1 == 1084 && i2 == 212 && i3 == 345)
-	float3 colliFreeN = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
-	bool colliFreeDir = RelativePos(vtxPos, p1Pos, colliFreeN);
-	//bool colliFreeDir = contact.colliFreeDir;
-	float3 prdPN = normalize(cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP));
-	float3 prdPn = cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP);
-	if (dot(prdPn, prdPn) <= 1e-6) // 如果三角形退化成一条线，就跳过这个三角形！！！
-	{
-
-		return false;
-	}
-	float dist = dot(vtxPrdP - p1PrdP, prdPN * (colliFreeDir ? 1 : -1)) - 2.0 * thickness;
-	/*if (i0 == 50)
-	{
-		printf("v: %d, f: %d %d %d\n", i0, i1, i2, i3);
-		printf("dist: %f\n", dist);
-		printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
-					vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
-					vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p1PrdP.x, p1PrdP.y, p1PrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z);
-	}*/
-	if (dist >= 0)
-	{
-		return false;
-	}
-	else
-	{
-		return true;
-	}
-}
-
-void VFResolveNew(
-	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
-	float3& vtxPrdP, float3& p1PrdP, float3& p2PrdP, float3& p3PrdP,
-	Contact contact, float thickness,
-	int i0, int i1, int i2, int i3)
-{
-	float3 vp = vtxPrdP, p1p = p1PrdP, p2p = p2PrdP, p3p = p3PrdP;
-	//if (debug == 7&& iteration >59)
-	//{
-	//	//if (i0 == 4608 || i1 == 4608 || i2 == 4608 || i3 == 4608)
-	//	//{
-	//		printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
-	//		printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
-	//			vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
-	//			vtxPrdP.x, vtxPrdP.y, vtxPrdP.z, p1PrdP.x, p1PrdP.y, p1PrdP.z, p2PrdP.x, p2PrdP.y, p2PrdP.z, p3PrdP.x, p3PrdP.y, p3PrdP.z);
-	//	//}
-	//}
-	float3 crossColliFreeN = cross(p2Pos - p1Pos, p3Pos - p1Pos);
-	float3 colliFreeN = normalize(cross(p2Pos - p1Pos, p3Pos - p1Pos));
-	bool colliFreeDir = RelativePos(vtxPos, p1Pos, colliFreeN);
-	//bool colliFreeDir = contact.colliFreeDir;
-	float3 crossPrdPN = cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP);
-	float3 prdPN = normalize(cross(p2PrdP - p1PrdP, p3PrdP - p1PrdP));
-	float3 p1ProjPrdP = p1PrdP + prdPN * (colliFreeDir ? 1 : -1) * 2.0 * thickness;
-	float depth = dot(p1ProjPrdP - vtxPrdP, (prdPN * (colliFreeDir ? 1 : -1))) * 0.5; // must > 0
-	float3 vtxFix = depth * (prdPN * (colliFreeDir ? 1 : -1));
-	float3 p1Fix = depth * (prdPN * (colliFreeDir ? -1 : 1));
-	float3 p2Fix = depth * (prdPN * (colliFreeDir ? -1 : 1));
-	float3 p3Fix = depth * (prdPN * (colliFreeDir ? -1 : 1));
-	/*
-	fixedBuffer.m_Data[i0] += vtxFix;
-	fixedBuffer.m_Data[i1] += p1Fix;
-	fixedBuffer.m_Data[i2] += p2Fix;
-	fixedBuffer.m_Data[i3] += p3Fix;
-	vFixedBuffer.m_Data[i0] += vtxFix;
-	fFixedBuffer.m_Data[i1] += p1Fix;
-	fFixedBuffer.m_Data[i2] += p2Fix;
-	fFixedBuffer.m_Data[i3] += p3Fix;
-	*/
-	float3 weight = BarycentricCoord(vtxPrdP, p1PrdP, p2PrdP, p3PrdP);
-	float sw = weight.x * weight.x + weight.y * weight.y + weight.z * weight.z;
-	vtxPrdP += vtxFix;
-	p1PrdP += p1Fix * weight.x / sw;
-	p2PrdP += p2Fix * weight.y / sw;
-	p3PrdP += p3Fix * weight.z / sw;
-	if (isnan(vtxPrdP.x) || isnan(vtxPrdP.y) || isnan(vtxPrdP.z) || isnan(p1PrdP.x) || isnan(p1PrdP.y) || isnan(p1PrdP.z) ||
-		isnan(p2PrdP.x) || isnan(p2PrdP.y) || isnan(p2PrdP.z) || isnan(p3PrdP.x) || isnan(p3PrdP.y) || isnan(p3PrdP.z))
-	{
-		printf("v: %d, f: %d, %d, %d\n", i0, i1, i2, i3);
-		printInfo("weight:", weight);
-		printInfo("colliFreeN cross:", crossColliFreeN);
-		printInfo("prdpN cross:", crossPrdPN);
-		printf("------ depth:%f, sw: %f \n", depth, sw);
-		printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n",
-			vtxPos.x, vtxPos.y, vtxPos.z, p1Pos.x, p1Pos.y, p1Pos.z, p2Pos.x, p2Pos.y, p2Pos.z, p3Pos.x, p3Pos.y, p3Pos.z,
-			vp.x, vp.y, vp.z, p1p.x, p1p.y, p1p.z, p2p.x, p2p.y, p2p.z, p3p.x, p3p.y, p3p.z);
-	}
-}
 
 // ------------- for ccdtest readfrom txt ----------------
 

@@ -340,9 +340,9 @@ void RegularSimColliWithProj()
 	// for collision debugging
 	colliSolver.m_nContact.m_Data.resize(pbdObj.meshTopol.posBuffer.GetSize(), 0);
 
-	string meshPath = "D://0319CCDTest//continueSimData//meshTopol//TestDLargeClothWithSphereMeshTopol.";
-	string constrPath = "D://0319CCDTest//continueSimData//constraint//TestDLargeClothWithSphereConstraint.";
-	string collisionPath = "D://0319CCDTest//continueSimData//collision//TestDLargeClothWithSphereCollision.";
+	string meshPath = "D://0319CCDTest//continueSimData//meshTopol//TestELargeClothWithSphereMeshTopol.";
+	string constrPath = "D://0319CCDTest//continueSimData//constraint//TestELargeClothWithSphereConstraint.";
+	string collisionPath = "D://0319CCDTest//continueSimData//collision//TestELargeClothWithSphereCollision.";
 
 	int contiCookTimes = 0;
 	for (size_t i = gStartFrame; i <= gEndFrame; i++)
@@ -364,15 +364,16 @@ void RegularSimColliWithProj()
 			pbdObj.SaveConstraint(constrPath + path);
 			//colliSolver.SaveCollision(collisionPath + path);
 		}
-		IO::SaveToplogy(pbdObj.meshTopol, "D://TestResult//0326NewCCDMethod2//TestDLargeClothWithSphere." + to_string(i) + ".cache");
+		IO::SaveToplogy(pbdObj.meshTopol, "D://TestResult//0326NewCCDMethod2//TestELargeClothWithSphere." + to_string(i) + ".cache");
 		printf("---------------------------frame %d topol saved--------------------\n", i);
 		fixedBuffer.SetName("P");
-		IO::SaveBuffer(fixedBuffer, "D://TestResult//0326NewCCDMethod2//TestDLargeClothWithSphereFixedBuffer." + to_string(i) + ".cache");
+		IO::SaveBuffer(fixedBuffer, "D://TestResult//0326NewCCDMethod2//TestELargeClothWithSphereFixedBuffer." + to_string(i) + ".cache");
 		printf("---------------------------frame %d fixedBuffer saved--------------------\n", i);
 		timers[globalTimer].Tock();  // global timer
 		PBD_DEBUGTIME(timers[globalTimer].GetFuncTime());
 	}
 }
+
 // --------------- version test data -------------------
 void Cloth2StaticTest()
 {
@@ -390,30 +391,66 @@ void Cloth2StaticTest()
 	SpatialHashSystem shs(prdPBuffer, meshTopol.indices, CPU, gridCenter, gridSize, cellSize);
 	shs.InitSH();
 
+	meshTopol.indices.SetName("indices");
+	meshTopol.posBuffer.SetName("P");
+	meshTopol.primList.SetName("primList");
+	IO::SaveToplogy(meshTopol, "D://VersionTestData//0327ResolveTest//2cloth//result." + to_string(-1) + ".cache");
+	printf("---------------------------rest pos saved--------------------\n");
+
+	Topology afterResolveTopol;
+	prdPBuffer.SetName("P");
+	afterResolveTopol.indices = meshTopol.indices;
+	afterResolveTopol.primList = meshTopol.primList;
+	afterResolveTopol.posBuffer = prdPBuffer;
+	afterResolveTopol.indices.SetName("indices");
+	afterResolveTopol.primList.SetName("primList");
+	afterResolveTopol.posBuffer.SetName("P");
+	IO::SaveToplogy(afterResolveTopol, "D://VersionTestData//0327ResolveTest//2cloth//result." + to_string(0) + ".cache");
+	printf("---------------------------prdp pos saved--------------------\n");
+
 	BufferInt vfIndices;
 	BufferInt resolveTimes;
 	for (int cp = 1; cp <= 10; ++cp)
 	{
 		ContactData contactData;
-		CCD_SH(contactData, shs, meshTopol, prdPBuffer, thickness);
+		CCD_SH_Extended(contactData, shs, meshTopol, prdPBuffer, thickness);
 		// ccd test result
-	
 		printf("contact size:%d\n", contactData.ctxs.GetSize());
 		std::set<int> idList;
 		for (int i = 0; i < contactData.ctxStartNum.GetSize(); ++i)
 		{
 			int id = contactData.ctxStartNum.m_Data[i].x;
-			idList.insert(contactData.ctxIndices.m_Data[id]);
+			/*printf("v: %d, f: %d %d %d\n", 
+				contactData.ctxIndices.m_Data[id],
+				contactData.ctxIndices.m_Data[id + 1], 
+				contactData.ctxIndices.m_Data[id + 2], 
+				contactData.ctxIndices.m_Data[id + 3]);*/
+			//idList.insert(contactData.ctxIndices.m_Data[id]);
 		}
-		std::set<int>::iterator it;
+		/*std::set<int>::iterator it;
 		printf("id: ");
 		for (it = idList.begin(); it != idList.end(); it++)
 		{
 			printf("%d -- ", *it);
 		}
-		printf("\n");
+		printf("\n");*/
 		
 		CollisionResolveNew(meshTopol, prdPBuffer, contactData, colliResolveIterations, thickness, debugFrameId, vfIndices);
+
+		ContactData contactData1;
+		CCD_SH_Narrow(contactData1, shs, meshTopol, prdPBuffer, thickness);
+		printf("contact size:%d\n", contactData1.ctxs.GetSize());
+		for (int i = 0; i < contactData1.ctxStartNum.GetSize(); ++i)
+		{
+			int id = contactData1.ctxStartNum.m_Data[i].x;
+			printf("v: %d, f: %d %d %d\n",
+				contactData1.ctxIndices.m_Data[id],
+				contactData1.ctxIndices.m_Data[id + 1],
+				contactData1.ctxIndices.m_Data[id + 2],
+				contactData1.ctxIndices.m_Data[id + 3]);
+			//idList.insert(contactData.ctxIndices.m_Data[id]);
+		}
+
 		Topology afterResolveTopol;
 		prdPBuffer.SetName("P");
 		afterResolveTopol.indices = meshTopol.indices;
@@ -443,35 +480,64 @@ void Cloth2StaticLargeTest()
 	SpatialHashSystem shs(prdPBuffer, meshTopol.indices, CPU, gridCenter, gridSize, cellSize);
 	shs.InitSH();
 
+	meshTopol.indices.SetName("indices");
+	meshTopol.posBuffer.SetName("P");
+	meshTopol.primList.SetName("primList");
+	IO::SaveToplogy(meshTopol, "D://VersionTestData//0327ResolveTest//2clothLarge//result." + to_string(-1) + ".cache");
+	printf("---------------------------rest pos saved--------------------\n");
+
+	Topology afterResolveTopol;
+	prdPBuffer.SetName("P");
+	afterResolveTopol.indices = meshTopol.indices;
+	afterResolveTopol.primList = meshTopol.primList;
+	afterResolveTopol.posBuffer = prdPBuffer;
+	afterResolveTopol.indices.SetName("indices");
+	afterResolveTopol.primList.SetName("primList");
+	afterResolveTopol.posBuffer.SetName("P");
+	IO::SaveToplogy(afterResolveTopol, "D://VersionTestData//0327ResolveTest//2clothLarge//result." + to_string(0) + ".cache");
+	printf("---------------------------prdp pos saved--------------------\n");
+
+	std::string prdPBeforePath = "D://0330ccdTest//beforePrdP//breforePrdp.";
+	std::string contactInfoPath = "D://0330ccdTest//ContactInfo//contactInfo.";
+
 	BufferInt vfIndices;
 	BufferInt resolveTimes;
-	for (int cp = 1; cp <= 20; ++cp)
+	for (int cp = 1; cp <= 10; ++cp)
 	{
 		ContactData contactData;
-		CCD_SH(contactData, shs, meshTopol, prdPBuffer, thickness);
+		CCD_SH_Extended(contactData, shs, meshTopol, prdPBuffer, thickness);
 		// ccd test result
-		
 		printf("contact size:%d\n", contactData.ctxs.GetSize());
-		std::set<int> idList;
 		for (int i = 0; i < contactData.ctxStartNum.GetSize(); ++i)
 		{
 			int id = contactData.ctxStartNum.m_Data[i].x;
-			idList.insert(contactData.ctxIndices.m_Data[id]);
-		/*	if (contactData.ctxIndices.m_Data[id] == 729)
-			{
-				printf("%d %d %d %d\n", contactData.ctxIndices.m_Data[id], contactData.ctxIndices.m_Data[id + 1],
-					contactData.ctxIndices.m_Data[id + 2], contactData.ctxIndices.m_Data[id + 3]);
-			}*/
-		}
-		std::set<int>::iterator it;
-		printf("id: ");
-		for (it = idList.begin(); it != idList.end(); it++)
-		{
-			printf("%d -- ", *it);
+		//	printf("v: %d, f: %d %d %d\n", contactData.ctxIndices.m_Data[id],
+				//contactData.ctxIndices.m_Data[id + 1], contactData.ctxIndices.m_Data[id + 2], contactData.ctxIndices.m_Data[id + 3]);
+		//if (contactData.ctxIndices.m_Data[id] == 1171)
+		//	{
+		//		printf("%d %d %d %d\n", contactData.ctxIndices.m_Data[id], contactData.ctxIndices.m_Data[id + 1],
+		//			contactData.ctxIndices.m_Data[id + 2], contactData.ctxIndices.m_Data[id + 3]);
+		//	}
 		}
 		printf("\n");
 		
 		CollisionResolveNew(meshTopol, prdPBuffer, contactData, colliResolveIterations, thickness, debugFrameId, vfIndices);
+
+		std::map<int, std::set<int>> contactVFMap;
+		std::map<int, BufferVector3f> contactVHitMap;
+		ContactData contactData1;
+		CCD_SH_Narrow(contactData1, shs, meshTopol, prdPBuffer, thickness, contactVFMap, contactVHitMap);
+		printf("contact size:%d\n", contactData1.ctxs.GetSize());
+	/*	for (int i = 0; i < contactData1.ctxStartNum.GetSize(); ++i)
+		{
+			int id = contactData1.ctxStartNum.m_Data[i].x;
+			printf("v: %d, f: %d %d %d\n", contactData1.ctxIndices.m_Data[id],
+				contactData1.ctxIndices.m_Data[id + 1], contactData1.ctxIndices.m_Data[id + 2], contactData1.ctxIndices.m_Data[id + 3]);
+		}
+		printf("\n");*/
+		SavePrdPBeforeCCD(prdPBeforePath + to_string(cp) + ".cache", meshTopol, prdPBuffer);
+		SaveContact(contactInfoPath + to_string(cp) + ".cache", contactVFMap, contactVHitMap);
+
 		Topology afterResolveTopol;
 		prdPBuffer.SetName("P");
 		afterResolveTopol.indices = meshTopol.indices;

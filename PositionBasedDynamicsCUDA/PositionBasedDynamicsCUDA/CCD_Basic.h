@@ -7,6 +7,7 @@
 #include "Utility.h"
 
 #define __ISDUPLICATE 1
+#define __USE_EPSILON 1
 
 struct Contact
 {
@@ -68,6 +69,7 @@ public:
 	ContactData contactData;
 	void CCD_N2();
 	void CCD_SH();
+	void CollisionSolver::CCD_SH_Extended();
 	void CollisionResolve();
 	void CollisionResolveNew(BufferVector3f& fixedBuffer, BufferVector3f& vFixedBuffer, BufferVector3f& fFixedBuffer, int debug, int iteration, int& debugFrameId);
 	void CollisionResolveWithoutItreation();
@@ -76,6 +78,9 @@ public:
 	void CollisionResolveTest();
 	void SetTimer(Timer* timer) { this->m_ccdSolverTimer = timer; }
 	void SaveCollision(string path); // for collision debugging
+	void SaveContact(string path); // for collision debugging
+	void SavePrdPBeforeCCD(string path); // for collision debugging
+	void SavePrdPAfterCCD(string path); // for collision debugging
 
     // for collision debugging
 	BufferVector3f beforeColliPrdPBuffer;
@@ -85,7 +90,9 @@ public:
 	int m_debugFrameID;
 	BufferInt vfIndices;
 	BufferVector3f afterProjPrdpBuffer;
-	
+
+	std::map<int, std::set<int>> m_contactVFMap;
+	std::map<int, BufferVector3f> m_contactVHitMap;
 
 private:
 	PBDObject* m_pbdObj;
@@ -102,6 +109,10 @@ private:
 	Topology m_topol;
 	BufferVector3f m_prdPBuffer;
 
+	bool ExtendedVFTest(
+		float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+		float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+		Contact& contact, int i0, int i1, int i2, int i3);
 	void VFResolve(float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
 		float3& vtxPrd, float3& p1Prd, float3& p2Prd, float3& p3Prd,
 		Contact ctx, int  i0, int i1, int i2, int i3);
@@ -160,6 +171,7 @@ bool RelativePos(float3 vtx, float3 pvtx, float3 n);
 float Point2Plane(float3 vtx, float3 p1, float3 p2, float3 p3);
 float3 pos(const float3 pos, const float3 prdPos, double t);
 float3 BarycentricCoord(float3 pos, float3 p0, float3 p1, float3 p2);
+bool IsDuplicated(BufferInt2& primList, BufferInt& indices, int i0, int i1, int i2, int i3);
 
 //inline float Distance(float3 p1, float3 p2)
 //{
@@ -196,6 +208,37 @@ void CollisionResolveNew(
 	float thickness,
 	int& debugFrameId,
 	BufferInt& vfIndices);
+bool ExtendedVFTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	Contact& contact, float thickness, int i0, int i1, int i2, int i3);
+void CCD_SH_Extended(
+	ContactData& contactData,
+	SpatialHashSystem& shs,
+	Topology meshTopol,
+	BufferVector3f prdPBuffer,
+	float thickness);
+bool NarrowVFCCDTest(
+	float3 vtxPos, float3 p1Pos, float3 p2Pos, float3 p3Pos,
+	float3 vtxPrdP, float3 p1PrdP, float3 p2PrdP, float3 p3PrdP,
+	Contact& contact, float thickness, int i0, int i1, int i2, int i3);
+void CCD_SH_Narrow(
+	ContactData& contactData,
+	SpatialHashSystem& shs,
+	Topology meshTopol,
+	BufferVector3f prdPBuffer,
+	float thickness,
+	std::map<int, std::set<int>>& contactVFMap, 
+	std::map<int, BufferVector3f>& contactVHitMap);
+void CCD_SH_Narrow(
+	ContactData& contactData,
+	SpatialHashSystem& shs,
+	Topology meshTopol, 
+	BufferVector3f prdPBuffer,
+	float thickness);
+void SavePrdPBeforeCCD(string path, Topology meshTopol, BufferVector3f prdP);
+void SavePrdPAfterCCD(string path, Topology meshTopol, BufferVector3f prdP);
+void SaveContact(string path, std::map<int, std::set<int>>& contactVFMap, std::map<int, BufferVector3f>& contactVHitMap);
 // for collision test 
 void readMeshFromTxt(string filename, Topology& topol);
 void readBufferFromTxt(string filename, BufferVector3f& prdPBuffer);
