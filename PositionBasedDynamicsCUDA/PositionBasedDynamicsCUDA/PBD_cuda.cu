@@ -89,17 +89,14 @@ void ConstraintPBD::InitDistanceInfo(BufferVector3f& meshPosBuffer, float stiffn
 		int2 p;
 		p.x = indices.GetSize();
 		p.y = 1;
-
 		constrPBDBuffer.color.m_Data.push_back(-1);
 		constrPBDBuffer.prdColor.m_Data.push_back(-1);
 		constrPBDBuffer.sortedColor.m_Data.push_back(-1);
 		constrPBDBuffer.constraintType.m_Data.push_back(ANCHOR);
 		constrPBDBuffer.stiffness.m_Data.push_back(1.0);
-
 		indices.m_Data.push_back(a == 0 ? 0 : resY - 1);
 		primList.m_Data.push_back(p);
 		sortedPrimID.m_Data.push_back(prims);
-
 		std::cout << "primList:" << primList.GetSize() << std::endl;
 		std::cout << "indices:" << indices.m_Data[indices.GetSize()] << std::endl;
 	}
@@ -577,7 +574,6 @@ void ConstraintPBD::SortEdgesColors()
 		printf("%d - ", sortedColor->m_Data[i]);
 	}
 	printf("\n");
-
 	printf("\n");
 	for (int i = 0; i < color->GetSize(); ++i)
 	{
@@ -1054,7 +1050,7 @@ void SolverPBD::advectGPU(float dt)
 void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 {
 	m_pbdSolverTimer->Tick();
-	switch (m_ht)   
+	switch (m_ht)
 	{
 	case CPU:
 		projectConstraintCPU(st, iterations);
@@ -1069,7 +1065,7 @@ void SolverPBD::ProjectConstraint(SolverType st, int iterations)
 	PBD_DEBUGTIME(m_pbdSolverTimer->GetFuncTime());
 }
 
-void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver, 
+void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver,
 	BufferVector3f& fixedBuffer, BufferVector3f& vFixedBuffer, BufferVector3f& fFixedBuffer, int debug)
 {
 	m_pbdSolverTimer->Tick();
@@ -1077,6 +1073,26 @@ void SolverPBD::ProjectConstraintWithColli(SolverType st, int iterations, Collis
 	{
 	case CPU:
 		projectConstraintWithColliCPU(st, iterations, colliSolver, fixedBuffer, vFixedBuffer, fFixedBuffer, debug);
+		break;
+	case GPU:
+		projectConstraintGPU(st, iterations);
+		break;
+	default:
+		break;
+	}
+	m_pbdSolverTimer->Tock();
+}
+
+void SolverPBD::ProjectConstraintWithColli(
+	SolverType st, int iterations, CollisionSolver* colliSolver,
+	float deltaTime,
+	BufferVector3f& fixedBuffer, BufferVector3f& vFixedBuffer, BufferVector3f& fFixedBuffer, int debug)
+{
+	m_pbdSolverTimer->Tick();
+	switch (m_ht)
+	{
+	case CPU:
+		projectConstraintWithColliCPU(st, iterations, colliSolver, deltaTime, fixedBuffer, vFixedBuffer, fFixedBuffer, debug);
 		break;
 	case GPU:
 		projectConstraintGPU(st, iterations);
@@ -1098,7 +1114,7 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
 	for (size_t ii = 0; ii < iterations; ii++)
 	{
- 		for (size_t i = 0; i < primList->GetSize(); i++)
+		for (size_t i = 0; i < primList->GetSize(); i++)
 		{
 			if (primList->m_Data[i].y != 2)
 				continue;
@@ -1110,12 +1126,12 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 			float3 r = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
 			r = normalize(r);
 
-			dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) *r.x ;
-			dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) *r.y ;
-			dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) *r.z ;
-			dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i])  *r.x ;
-			dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i])  *r.y ;
-			dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i])  *r.z ;
+			dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.x;
+			dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.y;
+			dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.z;
+			dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.x;
+			dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.y;
+			dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.z;
 			float k = 1;// -powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
 			dp1 *= k;
 			dp2 *= k;
@@ -1127,7 +1143,7 @@ void SolverPBD::projectConstraintCPU(SolverType st, int iterations)
 }
 
 
-void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver, 
+void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver,
 	BufferVector3f& fixedBuffer, BufferVector3f& vFixedBuffer, BufferVector3f& fFixedBuffer, int debug)
 {
 	PBD_DEBUG;
@@ -1142,15 +1158,115 @@ void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, Col
 	colliSolver->afterProjPrdpBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
 	for (size_t ii = 0; ii < iterations; ii++)
 	{
-		if ((ii % 10 ==0) || (ii == iterations - 1)) // 0 10 20 30 || == -1
+		if ((ii % 10 == 0) || (ii == iterations - 1)) // 0 10 20 30 || == -1
 		{
 			colliSolver->CCD_SH_Extended();
 			//colliSolver->CCD_SH();
-			printf("contact size: %d\n", colliSolver->contactData.ctxs.GetSize());			
+			printf("contact size: %d\n", colliSolver->contactData.ctxs.GetSize());
 		}
 		//printInfo("--- in project", prdPBuffer->m_Data[1]);
-		//for (int i = 0; i <= 3; ++i)
-		//{
+		for (int i = 0; i <= 3; ++i)
+		{
+		for (size_t i = 0; i < primList->GetSize(); i++)
+		{
+			if (primList->m_Data[i].y != 2)
+				continue;
+			int i0 = indices->m_Data[primList->m_Data[i].x];
+			int i1 = indices->m_Data[primList->m_Data[i].x + 1];
+			float3 dp1;
+			float3 dp2;
+			float d = Distance(prdPBuffer->m_Data[i0], prdPBuffer->m_Data[i1]);
+			float3 r = prdPBuffer->m_Data[i0] - prdPBuffer->m_Data[i1];
+			r = normalize(r);
+
+			dp1.x = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.x;
+			dp1.y = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.y;
+			dp1.z = -massBuffer->m_Data[i0] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.z;
+			dp2.x = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.x;
+			dp2.y = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.y;
+			dp2.z = massBuffer->m_Data[i1] / (massBuffer->m_Data[i0] + massBuffer->m_Data[i1]) * (d - restLengthBuffer->m_Data[i]) * r.z;
+			float k = 1;// -powf(1 - stiffnessBuffer->m_Data[i], 1.0 / (ii + 1));
+			dp1 *= k;
+			dp2 *= k;
+			prdPBuffer->m_Data[i0] += dp1;
+			prdPBuffer->m_Data[i1] += dp2;
+		}
+		}
+		//colliSolver->CollisionResolve();
+
+		/*string beforeResolvePath = "D://0326Test//testData//testBeforeResolve." + to_string(debug * iterations + ii) + ".cache";
+		m_pbdObj->constrPBDBuffer.prdPBuffer.SetName("P");
+		Topology tempBeforeResolve;
+		tempBeforeResolve.indices = m_pbdObj->meshTopol.indices;
+		tempBeforeResolve.primList = m_pbdObj->meshTopol.primList;
+		tempBeforeResolve.posBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
+		tempBeforeResolve.indices.SetName("Indices");
+		tempBeforeResolve.primList.SetName("primList");
+		tempBeforeResolve.posBuffer.SetName("P");
+		IO::SaveToplogy(tempBeforeResolve, beforeResolvePath);*/
+		for (int i = 0; i <= 2; ++i)
+		{
+		colliSolver->CollisionResolveNew(fixedBuffer, vFixedBuffer, fFixedBuffer, (debug * iterations + ii), ii, debugFrameId);
+		}
+		/*string path = "D://0326Test//testData//test." + to_string(debug*iterations + ii) + ".cache";
+		m_pbdObj->constrPBDBuffer.prdPBuffer.SetName("P");
+		Topology temp;
+		temp.indices = m_pbdObj->meshTopol.indices;
+		temp.primList = m_pbdObj->meshTopol.primList;
+		temp.posBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
+		temp.indices.SetName("Indices");
+		temp.primList.SetName("primList");
+		temp.posBuffer.SetName("P");
+		IO::SaveToplogy(temp, path);*/
+
+		//printInfo("--- after resolve", prdPBuffer->m_Data[1]);
+		//printf("--------------------itreation %d-------------------\n", ii);
+		ColliWithShpGrd();
+	}
+}
+
+void SolverPBD::projectConstraintWithColliCPU(
+	SolverType st, int iterations, CollisionSolver* colliSolver,
+	float deltaTime,
+	BufferVector3f& fixedBuffer, BufferVector3f& vFixedBuffer, BufferVector3f& fFixedBuffer, int debug)
+{
+	PBD_DEBUG;
+	int debugFrameId = 1;
+	auto primList = &(m_pbdObj->constrPBDBuffer.topol.primList);
+	auto prdPBuffer = &(m_pbdObj->constrPBDBuffer.prdPBuffer);
+	auto massBuffer = &(m_pbdObj->massBuffer);
+	auto restLengthBuffer = &(m_pbdObj->constrPBDBuffer.restLengthBuffer);
+	auto stiffnessBuffer = &(m_pbdObj->constrPBDBuffer.stiffnessBuffer);
+	// auto restPosBuffer = &(m_pbdObj->constrPBDBuffer.restPosBuffer);
+	auto indices = &(m_pbdObj->constrPBDBuffer.topol.indices);
+	colliSolver->afterProjPrdpBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
+	for (size_t ii = 0; ii < iterations; ii++)
+	{
+
+		if ((ii % 10 == 0) || (ii == iterations - 1)) // 0 10 20 30 || == -1
+		{
+			if (__USE_REPULSION)
+			{
+				colliSolver->CCD_SH_Repulsion();
+				colliSolver->ResolveRepulsion(deltaTime);
+				colliSolver->CCD_SH_Narrow();
+				printf("narrow contact size: %d\n", colliSolver->testRepulsionContact.ctxs.GetSize());
+				for (int i = 0; i < colliSolver->testRepulsionContact.ctxStartNum.GetSize(); ++i)
+				{
+					int id = colliSolver->testRepulsionContact.ctxStartNum.m_Data[i].x;
+					printf("v: %d, f: %d %d %d\n",
+						colliSolver->testRepulsionContact.ctxIndices.m_Data[id],
+						colliSolver->testRepulsionContact.ctxIndices.m_Data[id + 1],
+						colliSolver->testRepulsionContact.ctxIndices.m_Data[id + 2],
+						colliSolver->testRepulsionContact.ctxIndices.m_Data[id + 3]);
+				}
+			}			
+			colliSolver->CCD_SH_Extended();
+			printf("extend contact size: %d\n", colliSolver->contactData.ctxs.GetSize());
+		}
+
+		for (int i = 0; i <= 3; ++i)
+		{
 			for (size_t i = 0; i < primList->GetSize(); i++)
 			{
 				if (primList->m_Data[i].y != 2)
@@ -1175,36 +1291,14 @@ void SolverPBD::projectConstraintWithColliCPU(SolverType st, int iterations, Col
 				prdPBuffer->m_Data[i0] += dp1;
 				prdPBuffer->m_Data[i1] += dp2;
 			}
-		//}
-		//colliSolver->CollisionResolve();
+		}
 
-		/*string beforeResolvePath = "D://0326Test//testData//testBeforeResolve." + to_string(debug * iterations + ii) + ".cache";
-		m_pbdObj->constrPBDBuffer.prdPBuffer.SetName("P");
-		Topology tempBeforeResolve;
-		tempBeforeResolve.indices = m_pbdObj->meshTopol.indices;
-		tempBeforeResolve.primList = m_pbdObj->meshTopol.primList;
-		tempBeforeResolve.posBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
-		tempBeforeResolve.indices.SetName("Indices");
-		tempBeforeResolve.primList.SetName("primList");
-		tempBeforeResolve.posBuffer.SetName("P");
-		IO::SaveToplogy(tempBeforeResolve, beforeResolvePath);*/
-		//for (int i = 0; i <= 2; ++i)
-		//{
+		for (int i = 0; i <= 2; ++i)
+		{
+			//colliSolver->CollisionResolve();
 			colliSolver->CollisionResolveNew(fixedBuffer, vFixedBuffer, fFixedBuffer, (debug * iterations + ii), ii, debugFrameId);
-		//}
-		/*string path = "D://0326Test//testData//test." + to_string(debug*iterations + ii) + ".cache";
-		m_pbdObj->constrPBDBuffer.prdPBuffer.SetName("P");
-		Topology temp;
-		temp.indices = m_pbdObj->meshTopol.indices;
-		temp.primList = m_pbdObj->meshTopol.primList;
-		temp.posBuffer = m_pbdObj->constrPBDBuffer.prdPBuffer;
-		temp.indices.SetName("Indices");
-		temp.primList.SetName("primList");
-		temp.posBuffer.SetName("P");
-		IO::SaveToplogy(temp, path);*/
+		}
 
-		//printInfo("--- after resolve", prdPBuffer->m_Data[1]);
-		//printf("--------------------itreation %d-------------------\n", ii);
 		ColliWithShpGrd();
 	}
 }

@@ -22,13 +22,14 @@
 
 using namespace std;
 
+#define __USE_REPULSION 0
 #define __DEBUG 1
 
 #ifdef  __DEBUG
-	#define PBD_DEBUGTIME(t)  cout <<  __FUNCTION__ << "   " << t << "ms" << endl;
-	#define PBD_DEBUG  cout <<  __FUNCTION__  << endl;
+#define PBD_DEBUGTIME(t)  cout <<  __FUNCTION__ << "   " << t << "ms" << endl;
+#define PBD_DEBUG  cout <<  __FUNCTION__  << endl;
 #else
-	#define PBD_DEBUG
+#define PBD_DEBUG
 #endif //  __DEBUG
 
 #define KERNEL_FUNC __device__ __host__ 
@@ -97,7 +98,7 @@ struct Topology
 struct ConstraintPBD
 {
 	Topology topol;
-  // determine the rest pos structure of constrs
+	// determine the rest pos structure of constrs
 	BufferVector3f prdPBuffer;
 	BufferVector3f restPosBuffer;
 	BufferVector3f restAngleBuffer;
@@ -229,6 +230,10 @@ public:
 	void Advect(float dt);
 	void ProjectConstraint(SolverType st, int iterations);
 	void ProjectConstraintWithColli(SolverType st, int iterations, CollisionSolver* colliSolver, BufferVector3f& fixedBuffer, BufferVector3f& vFixedBufferint, BufferVector3f& fFixedBuffer, int debug);
+	void ProjectConstraintWithColli(
+		SolverType st, int iterations, CollisionSolver* colliSolver,
+		float deltaTime,
+		BufferVector3f& fixedBuffer, BufferVector3f& vFixedBufferint, BufferVector3f& fFixedBuffer, int debug);
 	void Integration(float dt);
 	void SetTimer(Timer* timer) { this->m_pbdSolverTimer = timer; }
 
@@ -246,7 +251,12 @@ private:
 	void advectCPU(float dt);
 	void advectGPU(float dt);
 	void projectConstraintCPU(SolverType st, int iterations);
-	void projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver, BufferVector3f& fixedBuffer, 
+	void projectConstraintWithColliCPU(SolverType st, int iterations, CollisionSolver* colliSolver, BufferVector3f& fixedBuffer,
+		BufferVector3f& vFixedBufferint, BufferVector3f& fFixedBuffer, int debug);
+	void projectConstraintWithColliCPU(
+		SolverType st, int iterations, CollisionSolver* colliSolver,
+		float deltaTime,
+		BufferVector3f& fixedBuffer,
 		BufferVector3f& vFixedBufferint, BufferVector3f& fFixedBuffer, int debug);
 	void projectConstraintGPU(SolverType st, int iterations);
 	void integrationCPU(float dt);
@@ -290,7 +300,7 @@ namespace IO
 		}
 		else
 		{
-			ofs  << data << endl; 
+			ofs << data << endl;
 		}
 		//cout << "typeName: " << typeid(T).name() << endl;
 	}
@@ -327,7 +337,7 @@ namespace IO
 	{
 		std::fstream in;
 		in.open(path, std::ios::in);
-		if (!in.is_open()) 
+		if (!in.is_open())
 		{
 			printf("Error opening the file\n");
 			exit(1);
@@ -356,7 +366,7 @@ namespace IO
 				for (int i = 0; i < dataBuffer.size(); i++)
 				{
 					meshIndices->m_Data.push_back(std::stoi(dataBuffer[i]));
-				}					
+				}
 			}
 			else if (name == "P")
 			{
@@ -365,14 +375,14 @@ namespace IO
 					std::vector<std::string> data = UT::splitString(dataBuffer[i], ",");
 					float3 vertexPos = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
 					meshPosBuffer->m_Data.push_back(vertexPos);
-				}				
+				}
 			}
 			else if (name == "primList")
 			{
 				for (int i = 0; i < dataBuffer.size(); ++i)
 				{
 					std::vector<std::string> data = UT::splitString(dataBuffer[i], ",");
-					int2 prim = make_int2(std::stoi(data[0]), std::stoi(data[1]));	
+					int2 prim = make_int2(std::stoi(data[0]), std::stoi(data[1]));
 					meshPrimList->m_Data.push_back(prim);
 					/*
 					bool ignore = false;
@@ -403,7 +413,7 @@ namespace IO
 			else if (name == "massBuffer")
 			{
 				for (int i = 0; i < dataBuffer.size(); ++i)
-				{		
+				{
 					massBuffer->m_Data.push_back(std::stof(dataBuffer[i]));
 				}
 			}
@@ -417,7 +427,7 @@ namespace IO
 				float3 g = make_float3(std::stof(data[0]), std::stof(data[1]), std::stof(data[2]));
 				pbdObj->gravity = g;
 			}
-		}	
+		}
 		in.close();
 		m_loadSuccess = true;
 		//printf("Read Topol File Done!\n");
@@ -501,10 +511,10 @@ namespace IO
 			else if (name == "restLengthBuffer")
 			{
 				for (int i = 0; i < dataBuffer.size(); ++i)
-				{					
+				{
 					float l = std::stof(dataBuffer[i]);
 					restLengthBuffer->m_Data.push_back(l);
-				}				
+				}
 			}
 			else if (name == "stiffnessBuffer")
 			{
